@@ -422,7 +422,7 @@ def section_2_dcs_electrodes(
 def build_section(
     cell,
     section,
-    inports,
+    wgs,
     initial_positions,
     wafer_min_max,
     electrode_length,
@@ -462,8 +462,6 @@ def build_section(
     }
     
     fix_dict(parameters, kwargs)
-    
-    wgs = [Waveguide.make_at_port(inport) for inport in inports]
     
     if section==1:
         global_x_middle, desired_x_position = expand_wgs_section_1(wgs, parameters)
@@ -601,5 +599,5 @@ def build_section(
 
     for wg in wgs:
         cell.add_to_layer(wg_layer, wg)
-    outports = [wg.current_port for wg in wgs]
-    return outports, initial_positions
+#     outports = [wg.current_port for wg in wgs]
+    return wgs, initial_positions

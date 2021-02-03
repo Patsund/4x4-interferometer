@@ -20,7 +20,7 @@ def fix_dict(parameters, kwargs):
         else:
             if parameters['kwarg_verbose']:
                 print(key, 'is not a parameter for this function')
-    
+ 
 
 def wf_line_from_bounds(bounds, wf_maxlength, wf_layer, wf_additions = {}, axis=1):
     # assumes x direction is fine and that leeways have been included in the bounds

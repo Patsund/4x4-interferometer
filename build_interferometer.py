@@ -21,12 +21,13 @@ inport_1 = Port((0, 0), np.pi/2, wg_width)
 inport_2 = Port((25, 0), np.pi/2, wg_width)
 inport_3 = Port((2*25, 0), np.pi/2, wg_width)
 device_inports = [inport_0, inport_1, inport_2, inport_3]
+wgs_1 = [Waveguide.make_at_port(inport) for inport in device_inports]
 
 initial_positions = (-25, 0)
-outports_1, initial_positions_1 = build_section(
+wgs_2, initial_positions_1 = build_section(
     cell=cell,
     section=1,
-    inports=device_inports,
+    wgs=wgs_1,
     initial_positions = initial_positions,
     wafer_min_max=wafer_min_max,
     electrode_length=1250,
@@ -43,10 +44,10 @@ outports_1, initial_positions_1 = build_section(
     mm_taper_length = 30
 )
 
-outports_2, initial_positions_2 = build_section(
+wgs_3, initial_positions_2 = build_section(
     cell=cell,
     section=2,
-    inports=outports_1,
+    wgs=wgs_2,
     initial_positions = initial_positions_1,
     wafer_min_max=wafer_min_max,
     electrode_length=1250,
@@ -63,10 +64,10 @@ outports_2, initial_positions_2 = build_section(
     mm_taper_length = 30
 )
 
-outports_3, initial_positions_3 = build_section(
+wgs_4, initial_positions_3 = build_section(
     cell=cell,
     section=1,
-    inports=outports_2,
+    wgs=wgs_3,
     initial_positions = initial_positions_2,
     wafer_min_max=wafer_min_max,
     electrode_length=1250,
@@ -83,10 +84,10 @@ outports_3, initial_positions_3 = build_section(
     mm_taper_length = 30
 )
 
-outports_4, initial_positions_4 = build_section(
+wgs_out, initial_positions_4 = build_section(
     cell=cell,
     section=2,
-    inports=outports_3,
+    wgs=wgs_4,
     initial_positions = initial_positions_3,
     wafer_min_max=wafer_min_max,
     electrode_length=1250,
@@ -105,7 +106,7 @@ outports_4, initial_positions_4 = build_section(
 )
 
 fiber_array_incouplers = [Waveguide.make_at_port(inport) for inport in device_inports]
-fiber_array_outcouplers = [Waveguide.make_at_port(outport) for outport in outports_4]
+fiber_array_outcouplers = [Waveguide.make_at_port(wg.current_port) for wg in wgs_out]
 
 wg_sep = 25
 fiber_coupling_leeways = (100, 500)
