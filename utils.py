@@ -1,5 +1,5 @@
 import numpy as np
-
+from shapely.geometry import Polygon
 
 def update_bounds(bounds1, bounds2):
     # (minx, miny, maxx, maxy)
@@ -22,7 +22,29 @@ def fix_dict(parameters, kwargs):
                 print(key, 'is not a parameter for this function')
  
 
-def wf_line_from_bounds(bounds, wf_maxlength, wf_layer, wf_additions = {}, axis=1):
+
+def single_wf_from_bounds(cell, wf_bounds, wf_layer):
+    wf_corners = [(  # top_left corner (minx, maxy)
+                          wf_bounds[0],
+                          wf_bounds[3]
+                      ),
+                      (  # top_right corner (maxx, maxy)
+                          wf_bounds[2],
+                          wf_bounds[3]
+                      ),
+                      (  # bottom_right corner (maxx, miny)
+                          wf_bounds[2],
+                          wf_bounds[1]
+                      ),
+                      (  # bottom_left_corner (minx, miny)
+                          wf_bounds[0],
+                          wf_bounds[1]
+                      )]
+    wf_polygon = Polygon(wf_corners)
+    cell.add_to_layer(wf_layer, wf_polygon)
+
+
+def wf_line_from_bounds(cell, bounds, wf_maxlength, wf_layer, wf_additions = {}, axis=1):
     # assumes x direction is fine and that leeways have been included in the bounds
     current_position = bounds[axis]
     current_limit = min(current_position + wf_maxlength, bounds[axis+2])
@@ -35,7 +57,7 @@ def wf_line_from_bounds(bounds, wf_maxlength, wf_layer, wf_additions = {}, axis=
         if iteration in wf_additions.keys():
             wf_addition = wf_additions[iteration]
             bounds = np.add(bounds, wf_addition)
-        single_wf_from_bounds(np.add(wf_bounds, wf_addition), wf_layer)
+        single_wf_from_bounds(cell, np.add(wf_bounds, wf_addition), wf_layer)
         current_position=current_limit
         current_limit = min(current_position + wf_maxlength, bounds[axis+2])
         iteration+=1
@@ -45,5 +67,5 @@ def wf_line_from_bounds(bounds, wf_maxlength, wf_layer, wf_additions = {}, axis=
         bounds = np.add(bounds, wf_addition)
     wf_bounds[axis] = current_position
     wf_bounds[axis+2] = current_limit
-    single_wf_from_bounds(np.add(wf_bounds, wf_addition), wf_layer)
+    single_wf_from_bounds(cell, np.add(wf_bounds, wf_addition), wf_layer)
     return bounds

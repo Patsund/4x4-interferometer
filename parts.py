@@ -19,33 +19,11 @@ std_coupler_params = {
     'ap_max_ff': 0.8,
     'n_ap_gratings': 55,
     'taper_length': 12
-}
-
-
-def single_wf_from_bounds(wf_bounds, wf_layer):
-    wf_corners = [(  # top_left corner (minx, maxy)
-                          wf_bounds[0],
-                          wf_bounds[3]
-                      ),
-                      (  # top_right corner (maxx, maxy)
-                          wf_bounds[2],
-                          wf_bounds[3]
-                      ),
-                      (  # bottom_right corner (maxx, miny)
-                          wf_bounds[2],
-                          wf_bounds[1]
-                      ),
-                      (  # bottom_left_corner (minx, miny)
-                          wf_bounds[0],
-                          wf_bounds[1]
-                      )]
-    wf_polygon = Polygon(wf_corners)
-    cell.add_to_layer(wf_layer, wf_polygon)
-        
+}        
 
 def fiber_array_to_coupling(
-    ports, incoupling, wg_layer, wf_layer, coupler_separation, min_radius, 
-    device_separation=500, leeways=(100, 100)
+    cell, ports, incoupling, wg_layer, wf_layer, coupler_separation,
+    min_radius, device_separation=500, leeways=(100, 100)
 ):
     # Assume the first mode is the top mode
     total_bounds = (np.inf, np.inf, -np.inf, -np.inf)
@@ -78,7 +56,7 @@ def fiber_array_to_coupling(
         leeway_for_bounds = [0, -leeways[1], leeways[0], leeways[1]]
     total_bounds = np.add(total_bounds, leeway_for_bounds)
     # single_wf_from_bounds(total_bounds, wf_layers)
-    wf_line_from_bounds(total_bounds, 1040, wf_layer, axis=0)
+    wf_line_from_bounds(cell, total_bounds, 1040, wf_layer, axis=0)
     return total_bounds
 
 
@@ -508,6 +486,168 @@ def build_curve(wgs, next_section, parameters, next_middle_point=-1):
     return wgs
 
 
+def build_interferometer(
+    cell,
+    wgs,
+    electrode_length,
+    coupler_sep,
+    coupler_length,
+    sm_wg_width,
+    wg_layer,
+    wf_layer,
+    electrode_layer,
+    electrode_wf_layer,
+    electrode_contact_pad_coordinates,
+    second_x_middle,
+    total_bounds=(np.inf, np.inf, -np.inf, -np.inf),
+    **kwargs
+):
+    parameters = {
+        'mm_wg_width': sm_wg_width,
+        'mm_taper_length': 0,
+        'min_radius': 50,
+        'mzi_sep_leeway': 50,
+        'wg_sep': 25,
+        'electrode_wg_sep': 100,
+        'last_layer': False,
+        # For directional couplers and bends
+        'sine_s_x': 60,
+        # For electrode function
+        'electrode_width': 25,
+        'electrode_sep_y': 15,
+        'electrode_sep': 1.1,
+        'crossing_width': 10,
+        'electrode_taper_leeway': 5,
+        'electrode_taper_length': 30,
+        # For writefields
+        'wf_maxlength': 1040,
+        'wf_leeways': (10, 10),  # This should be strictly smaller than mzi_sep_leeways for the interferometer function
+        'wf_x_sep': 10,
+        'wf_electrode_leeways': (10, 10),
+        'wf_maxlength': 1040
+    }
+    fix_dict(parameters, kwargs)
+
+    initial_position_y = wgs[0].current_port.origin[1]
+    x_middle = (wgs[0].current_port.origin[0]
+                + wgs[-1].current_port.origin[0])/2
+    wg_wf_bounds = list(total_bounds).copy()
+    # TODO: add bounds for electrode wfs
+    # assume the wgs have already been expanded appropriately for section 1
+    # First section 1
+    for _ in range(2):
+        section_1_dcs_electrodes(
+            cell=cell,
+            wgs=wgs,
+            electrode_length=electrode_length,
+            wg_layer=wg_layer,
+            wf_layer=wf_layer,
+            electrode_layer=electrode_layer,
+            electrode_wf_layer=electrode_wf_layer,
+            coupler_sep=coupler_sep,
+            coupler_length=coupler_length,
+            sm_wg_width=sm_wg_width,
+            parameters=parameters
+        ) 
+    # First section 2
+    # Expand the wgs first
+    _, _ = expand_wgs_section_2(wgs, parameters)
+    for _ in range(2):
+        section_2_dcs_electrodes(
+            cell=cell,
+            wgs=wgs,
+            electrode_length=electrode_length,
+            wg_layer=wg_layer,
+            wf_layer=wf_layer,
+            electrode_layer=electrode_layer,
+            electrode_wf_layer=electrode_wf_layer,
+            coupler_sep=coupler_sep,
+            coupler_length=coupler_length,
+            sm_wg_width=sm_wg_width,
+            parameters=parameters
+        )
+    # Add a curve for the next two sections
+    # First, make a line of write fields leading up to the start of the curve
+    x_extrema = (x_middle
+                 - parameters['wg_sep']/2 
+                 - parameters['electrode_wg_sep'], 
+                 x_middle
+                 + parameters['wg_sep']/2
+                 + parameters['electrode_wg_sep'])
+    wf_line_bounds = (x_extrema[0] - parameters['wf_leeways'][0],
+                      initial_position_y,
+                      x_extrema[1]
+                      + parameters['wf_leeways'][0],
+                      wgs[0].current_port.origin[1])
+    line_bounds = wf_line_from_bounds(
+        cell=cell,
+        bounds=wf_line_bounds,
+        wf_maxlength=parameters['wf_maxlength'],
+        wf_layer=wf_layer
+    )
+    wg_wf_bounds = update_bounds(wg_wf_bounds, line_bounds)
+    # TODO: update the build_curve function to return wf_bounds
+    wgs = build_curve(wgs=wgs,
+                      next_section=1,
+                      parameters=parameters,
+                      next_middle_point=second_x_middle)
+    initial_position_y = wgs[0].current_port.origin[1]
+    # Second section 1
+    for _ in range(2):
+        section_1_dcs_electrodes(
+            cell=cell,
+            wgs=wgs,
+            electrode_length=electrode_length,
+            wg_layer=wg_layer,
+            wf_layer=wf_layer,
+            electrode_layer=electrode_layer,
+            electrode_wf_layer=electrode_wf_layer,
+            coupler_sep=coupler_sep,
+            coupler_length=coupler_length,
+            sm_wg_width=sm_wg_width,
+            parameters=parameters
+        ) 
+    # Second section 2
+    # Expand the wgs first
+    _, _ = expand_wgs_section_2(wgs, parameters)
+    for _ in range(2):
+        section_2_dcs_electrodes(
+            cell=cell,
+            wgs=wgs,
+            electrode_length=electrode_length,
+            wg_layer=wg_layer,
+            wf_layer=wf_layer,
+            electrode_layer=electrode_layer,
+            electrode_wf_layer=electrode_wf_layer,
+            coupler_sep=coupler_sep,
+            coupler_length=coupler_length,
+            sm_wg_width=sm_wg_width,
+            parameters=parameters
+        )
+    # Add a second line of writefields following the waveguides
+    x_extrema = (second_x_middle
+                 - parameters['wg_sep']/2 
+                 - parameters['electrode_wg_sep'], 
+                 second_x_middle
+                 + parameters['wg_sep']/2
+                 + parameters['electrode_wg_sep'])
+    wf_line_bounds = (x_extrema[0] - parameters['wf_leeways'][0],
+                      wgs[0].current_port.origin[1],
+                      x_extrema[1]
+                      + parameters['wf_leeways'][0],
+                      initial_position_y)
+    line_bounds = wf_line_from_bounds(
+        cell=cell,
+        bounds=wf_line_bounds,
+        wf_maxlength=parameters['wf_maxlength'],
+        wf_layer=wf_layer
+    )
+    wg_wf_bounds = update_bounds(wg_wf_bounds, line_bounds)
+    # TODO: Figure out if this should go here or somewhere else
+    for wg in wgs:
+        cell.add_to_layer(wg_layer, wg)
+    return wgs, wg_wf_bounds
+
 def build_section(
     cell,
     section,
@@ -604,7 +744,9 @@ def build_section(
                          global_x_middle + parameters['wg_sep']/2 + parameters['electrode_wg_sep'])
             wf_line_bounds = (x_extrema[0] - parameters['wf_leeways'][0], initial_positions[1],
                               x_extrema[1] + parameters['wf_leeways'][0], wgs[0].current_port.origin[1]+parameters['sine_s_x'])
-            line_bounds = wf_line_from_bounds(bounds=wf_line_bounds,
+            line_bounds = wf_line_from_bounds(
+                                cell=cell,
+                                bounds=wf_line_bounds,
                                 wf_maxlength=parameters['wf_maxlength'],
                                 wf_layer=wf_layer)
             #wf_bounds = update_bounds(total_bounds, line_bounds)
@@ -621,7 +763,8 @@ def build_section(
                               wf_line_bounds[3],
                               initial_positions[0] + 3 * parameters['wg_sep'] + parameters['wf_leeways'][0],
                               wf_line_bounds[3] + bend_radius + parameters['wf_leeways'][1])
-            bend_bounds = wf_line_from_bounds(bounds=wf_bend_bounds,
+            bend_bounds = wf_line_from_bounds(cell=cell,
+                                              bounds=wf_bend_bounds,
                                               wf_maxlength=parameters['wf_maxlength'],
                                               wf_layer=wf_layer,
                                               axis=0)
@@ -640,7 +783,9 @@ def build_section(
                          global_x_middle + parameters['wg_sep']/2 + parameters['electrode_wg_sep'])
             wf_line_bounds = (x_extrema[0] - parameters['wf_leeways'][0], wgs[0].current_port.origin[1]-parameters['sine_s_x'],
                               x_extrema[1] + parameters['wf_leeways'][0], initial_positions[1])
-            line_bounds = wf_line_from_bounds(bounds=wf_line_bounds,
+            line_bounds = wf_line_from_bounds(
+                                cell=cell,
+                                bounds=wf_line_bounds,
                                 wf_maxlength=parameters['wf_maxlength'],
                                 wf_layer=wf_layer)
             #wf_bounds = update_bounds(total_bounds, line_bounds)
@@ -656,7 +801,8 @@ def build_section(
                               wf_line_bounds[1] - bend_radius - parameters['wf_leeways'][1],
                               initial_positions[0] + 3 * parameters['wg_sep'] + parameters['wf_leeways'][0],
                               wf_line_bounds[1])
-            bend_bounds = wf_line_from_bounds(bounds=wf_bend_bounds,
+            bend_bounds = wf_line_from_bounds(cell=cell,
+                                              bounds=wf_bend_bounds,
                                               wf_maxlength=parameters['wf_maxlength'],
                                               wf_layer=wf_layer,
                                               axis=0)
@@ -674,7 +820,9 @@ def build_section(
                                   initial_positions[1],
                                   x_extrema[1] + parameters['wf_leeways'][0],
                                   wgs[0].current_port.origin[1]+parameters['sine_s_x'])
-                line_bounds = wf_line_from_bounds(bounds=wf_line_bounds,
+                line_bounds = wf_line_from_bounds(
+                                    cell=cell,
+                                    bounds=wf_line_bounds,
                                     wf_maxlength=parameters['wf_maxlength'],
                                     wf_layer=wf_layer)
             else:
@@ -682,7 +830,8 @@ def build_section(
                              global_x_middle + parameters['wg_sep']/2 + parameters['electrode_wg_sep'])
                 wf_line_bounds = (x_extrema[0] - parameters['wf_leeways'][0], wgs[0].current_port.origin[1],
                                   x_extrema[1] + parameters['wf_leeways'][0], initial_positions[1])
-                line_bounds = wf_line_from_bounds(bounds=wf_line_bounds,
+                line_bounds = wf_line_from_bounds(cell=cell,
+                                                  bounds=wf_line_bounds,
                                                   wf_maxlength=parameters['wf_maxlength'],
                                                   wf_layer=wf_layer)
 
