@@ -113,12 +113,30 @@ def wgs_to_fiber_array(
     total_bounds = (np.inf, np.inf, -np.inf, -np.inf)
     wgs = [Waveguide.make_at_port(prt) for prt in ports]
     first_bend = np.pi/2
+    wg_distances = [0 for _ in range(len(wgs))]
     if is_incoupling:
         first_bend = -np.pi/2
         coupler_positions = coupler_positions[::-1]
     if not is_incoupling:
         wgs = wgs[::-1]
 #         edge_position = coupler_positions[0][0]
+    for idx, wg in enumerate(wgs):
+        # this calculated distance is wrong by about 0.02,
+        # which I think is okay
+        distance = (2 * min_radius*np.pi  # x
+                    + abs(coupler_positions[-1][0]
+                          - wgs[idx].current_port.origin[0])
+                    + abs(coupler_positions[-1][0]
+                          - coupler_positions[idx][0])
+                    - 2*min_radius
+                    + 2*gc_leeway
+                    + 2*(3-idx) * wg_sep
+                    + abs(wgs[idx].current_port.origin[1]  # y
+                          - coupler_positions[0][1])
+                    - 4*min_radius
+                    + 2*(3-idx)*wg_sep)
+        wg_distances[idx] = distance
+    max_distance = max(wg_distances)
     for idx, wg in enumerate(wgs):
         if is_incoupling:
             wg._current_port.angle = -np.pi/2
@@ -139,6 +157,9 @@ def wgs_to_fiber_array(
         wg.add_bend(-first_bend, min_radius)
         wg.add_straight_segment_until_x(coupler_positions[idx][0]
                                         + np.sin(first_bend) * min_radius)
+        # ADD WIGGLES HERE the extra distance added should be equal to
+        # extra distance
+        extra_distance = max_distance - wg_distances[idx]
         wg.add_bend(-first_bend, min_radius)
         wg.add_straight_segment_until_y(coupler_positions[0][1])
         total_bounds = update_bounds(total_bounds,
@@ -960,7 +981,8 @@ def section_2_dcs_electrodes(
     coupler_sep,
     coupler_length,
     sm_wg_width,
-    parameters
+    parameters,
+    extra_wiggle_lengths=[-1, -1, -1, -1]
 ):
     # Interacting waveguides
     if wgs[1].current_port.angle == np.pi/2:
@@ -994,7 +1016,10 @@ def section_2_dcs_electrodes(
 
     # Delayed waveguides
     for idx in (0, 3):
-        path_length_difference = wgs[1].length - wgs[idx].length
+        if extra_wiggle_lengths == [-1, -1, -1, -1]:
+            path_length_difference = wgs[1].length - wgs[idx].length
+        else:
+            path_length_difference = extra_wiggle_lengths[idx]
         current_y_position = wgs[idx].current_port.origin[1]
         goal_y_position = wgs[1].current_port.origin[1]
         # ADD WIGGLES HERE: need the path length to be
@@ -1004,7 +1029,11 @@ def section_2_dcs_electrodes(
     return electrodes
 
 
-def build_curve(wgs, next_section, parameters, next_middle_point=-1):
+def build_curve(wgs,
+                next_section,
+                parameters,
+                extra_wiggle_lengths,
+                next_middle_point=-1):
     current_middle_point = (wgs[0].current_port.origin[0]
                             + wgs[-1].current_port.origin[0])/2
     # allow to set manually
@@ -1050,7 +1079,7 @@ def build_curve(wgs, next_section, parameters, next_middle_point=-1):
         if wg.current_port.angle == np.pi/2:
             wg.add_straight_segment((3-idx) * parameters['wg_sep'])
             wg.add_bend(-np.pi/2, parameters['min_radius'])
-            if idx == 0:
+            if idx == 0 or idx == 3:
                 wg.add_straight_segment((3-idx) * parameters['wg_sep'])
                 wg.add_straight_segment_until_x(goal_x_positions[idx]
                                                 - parameters['min_radius'])
@@ -1059,7 +1088,7 @@ def build_curve(wgs, next_section, parameters, next_middle_point=-1):
                 # ADD WIGGLES HERE: need the path length to be
                 # equal to path_length_difference, and for the
                 # waveguide to extend to goal_y_position
-                path_length_difference = longest_path_length-wg.length
+                path_length_difference = extra_wiggle_lengths[idx]
                 # placeholder in the meantime
                 wg.add_straight_segment_until_x(goal_x_positions[idx]
                                                 - parameters['min_radius'])
@@ -1084,7 +1113,6 @@ def build_curve(wgs, next_section, parameters, next_middle_point=-1):
 
             wg.add_bend(np.pi/2, parameters['min_radius'])
             wg.add_straight_segment(idx * parameters['wg_sep'])
-
     wgs = wgs[::-1]
     return wgs
 
@@ -1162,8 +1190,8 @@ def build_interferometer(
                                     + idx*connector_center_separation,
                                     parameters['connector_start_y'])
                                    for idx in range(6)]
-    # TODO: add bounds for electrode wfs
-    # assume the wgs have already been expanded appropriately for section 1
+
+    # assume the wg separation is already appropriate for section 1
     # First section 1
     left_side_electrodes = [None for _ in range(6)]
     right_side_electrodes = [None for _ in range(6)]
@@ -1189,22 +1217,76 @@ def build_interferometer(
     # First section 2
     # Expand the wgs first
     _, _ = expand_wgs_section_2(wgs, parameters)
-    for electrode_idx in range(4, 6):
-        sec2_electrodes = section_2_dcs_electrodes(
-            cell=cell,
-            wgs=wgs,
-            electrode_length=electrode_length,
-            wg_layer=wg_layer,
-            wf_layer=wf_layer,
-            electrode_layer=electrode_layer,
-            electrode_wf_layer=electrode_wf_layer,
-            connector_coordinates=left_connector_coordinates[electrode_idx],
-            coupler_sep=coupler_sep,
-            coupler_length=coupler_length,
-            sm_wg_width=sm_wg_width,
-            parameters=parameters
+    electrode_idx = 4
+    # path lengths are equal at this point
+    sec_2_initial_path_lengths = [wg.length for wg in wgs]
+    sec2_electrodes = section_2_dcs_electrodes(
+        cell=cell,
+        wgs=wgs,
+        electrode_length=electrode_length,
+        wg_layer=wg_layer,
+        wf_layer=wf_layer,
+        electrode_layer=electrode_layer,
+        electrode_wf_layer=electrode_wf_layer,
+        connector_coordinates=left_connector_coordinates[electrode_idx],
+        coupler_sep=coupler_sep,
+        coupler_length=coupler_length,
+        sm_wg_width=sm_wg_width,
+        parameters=parameters,
+        extra_wiggle_lengths=[0, 0, 0, 0]
+    )
+    sec_2_intermediate_path_lengths = [wg.length for wg in wgs]
+    delta_path_lengths = [sec_2_intermediate_path_lengths[idx]
+                          - sec_2_initial_path_lengths[idx]
+                          for idx in range(len(wgs))]
+    curve_goal_x_positions = [
+        # leftmost to rightmost
+        (second_x_middle
+         + 0.5*parameters['electrode_wg_sep']
+         + parameters['wg_sep']),
+        # #2 from left to #2 from right
+        (second_x_middle
+         + 0.5*parameters['electrode_wg_sep']),
+        # #2 from right to #2 from left
+        (second_x_middle
+         - 0.5*parameters['electrode_wg_sep']),
+        # rightmost to leftmost
+        (second_x_middle
+         - 0.5*parameters['electrode_wg_sep']
+         - parameters['wg_sep'])
+    ]
+    post_curve_path_lengths = [0 for _ in range(len(wgs))]
+    for idx, wg in enumerate(wgs):
+        post_curve_path_length = (
+            sec_2_intermediate_path_lengths[idx]
+            + delta_path_lengths[idx]
+            + 2 * (3-idx) * parameters['wg_sep']
+            + (curve_goal_x_positions[idx]
+               - wg.current_port.origin[0]
+               - 2*parameters['min_radius'])
+            + np.pi*parameters['min_radius']
         )
-        left_side_electrodes[electrode_idx] = sec2_electrodes
+        post_curve_path_lengths[idx] = post_curve_path_length
+    extra_wiggle_lengths = [post_curve_path_lengths[0]
+                            - post_curve_path_lengths[idx]
+                            for idx in range(len(wgs))]
+    left_side_electrodes[electrode_idx] = sec2_electrodes
+    electrode_idx = 5
+    sec2_electrodes = section_2_dcs_electrodes(
+        cell=cell,
+        wgs=wgs,
+        electrode_length=electrode_length,
+        wg_layer=wg_layer,
+        wf_layer=wf_layer,
+        electrode_layer=electrode_layer,
+        electrode_wf_layer=electrode_wf_layer,
+        connector_coordinates=left_connector_coordinates[electrode_idx],
+        coupler_sep=coupler_sep,
+        coupler_length=coupler_length,
+        sm_wg_width=sm_wg_width,
+        parameters=parameters
+    )
+    left_side_electrodes[electrode_idx] = sec2_electrodes
     # Add a curve for the next two sections
     # First, make a line of write fields leading up to the start of the curve
     x_extrema = (x_middle
@@ -1229,6 +1311,7 @@ def build_interferometer(
     wgs = build_curve(wgs=wgs,
                       next_section=1,
                       parameters=parameters,
+                      extra_wiggle_lengths=extra_wiggle_lengths,
                       next_middle_point=second_x_middle)
     curve_top = (wf_line_bounds[3]
                  + 3*parameters['wg_sep']
@@ -1344,7 +1427,6 @@ def build_interferometer(
         return_values = right_side_electrodes[idx]
         short_wg, signal_wg, long_wg = return_values[:3]
         direction, wf_line_bounds = return_values[3:]
-#         short_wg, signal_wg, long_wg, direction = right_side_electrodes[idx]
         if direction == 1:
             kink = electrode_connector(
                 cell=cell,
