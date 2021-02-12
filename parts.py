@@ -137,6 +137,7 @@ def wgs_to_fiber_array(
                     + 2*(3-idx)*wg_sep)
         wg_distances[idx] = distance
     max_distance = max(wg_distances)
+
     for idx, wg in enumerate(wgs):
         if is_incoupling:
             wg._current_port.angle = -np.pi/2
@@ -155,8 +156,10 @@ def wgs_to_fiber_array(
                                         - (3-idx)*wg_sep)
         # third bend then heading towards gcs
         wg.add_bend(-first_bend, min_radius)
+
         wg.add_straight_segment_until_x(coupler_positions[idx][0]
                                         + np.sin(first_bend) * min_radius)
+
         # ADD WIGGLES HERE the extra distance added should be equal to
         # extra distance
         extra_distance = max_distance - wg_distances[idx]
@@ -1016,16 +1019,17 @@ def section_2_dcs_electrodes(
 
     # Delayed waveguides
     for idx in (0, 3):
+        current_y_position = wgs[idx].current_port.origin[1]
+        goal_y_position = wgs[1].current_port.origin[1]
         if extra_wiggle_lengths == [-1, -1, -1, -1]:
             path_length_difference = wgs[1].length - wgs[idx].length
         else:
-            path_length_difference = extra_wiggle_lengths[idx]
-        current_y_position = wgs[idx].current_port.origin[1]
-        goal_y_position = wgs[1].current_port.origin[1]
+            path_length_difference = extra_wiggle_lengths[idx] + abs(goal_y_position-current_y_position)
+
         # ADD WIGGLES HERE: need the path length to be
         # equal to path_length_difference, and for the
         # waveguide to extend to goal_y_position
-        wgs[idx].add_straight_segment(abs(goal_y_position-current_y_position))
+        wgs[idx].add_straight_segment(abs(goal_y_position-current_y_position))  # DELETE THIS AND ADD CMP
     return electrodes
 
 
@@ -1076,43 +1080,29 @@ def build_curve(wgs,
     longest_path_length = -1
     for idx, wg in enumerate(wgs):
         # turn to the right
-        if wg.current_port.angle == np.pi/2:
+        wg.add_straight_segment((3-idx) * parameters['wg_sep'])
+        wg.add_bend(-np.pi/2, parameters['min_radius'])
+        if idx == 0 or idx == 3:
             wg.add_straight_segment((3-idx) * parameters['wg_sep'])
-            wg.add_bend(-np.pi/2, parameters['min_radius'])
-            if idx == 0 or idx == 3:
-                wg.add_straight_segment((3-idx) * parameters['wg_sep'])
-                wg.add_straight_segment_until_x(goal_x_positions[idx]
-                                                - parameters['min_radius'])
-                longest_path_length = wg.length
-            else:
-                # ADD WIGGLES HERE: need the path length to be
-                # equal to path_length_difference, and for the
-                # waveguide to extend to goal_y_position
-                path_length_difference = extra_wiggle_lengths[idx]
-                # placeholder in the meantime
-                wg.add_straight_segment_until_x(goal_x_positions[idx]
-                                                - parameters['min_radius'])
-            wg.add_bend(-np.pi/2, parameters['min_radius'])
-            wg.add_straight_segment((3-idx) * parameters['wg_sep'])
+            wg.add_straight_segment_until_x(goal_x_positions[idx]
+                                            - parameters['min_radius'])
+            longest_path_length = wg.length
         else:
-            wg.add_straight_segment(idx * parameters['wg_sep'])
-            wg.add_bend(np.pi/2, parameters['min_radius'])
-            if idx == 0:
-                wg.add_straight_segment((3-idx) * parameters['wg_sep'])
-                wg.add_straight_segment_until_x(goal_x_positions[idx]
-                                                - parameters['min_radius'])
-                longest_path_length = wg.length
-            else:
-                # ADD WIGGLES HERE: need the path length to be
-                # equal to path_length_difference, and for the
-                # waveguide to extend to goal_y_position
-                path_length_difference = longest_path_length-wg.length
-                # placeholder in the meantime
-                wg.add_straight_segment_until_x(goal_x_positions[idx]
-                                                - parameters['min_radius'])
+            # ADD WIGGLES HERE: need the path length to be
+            # equal to path_length_difference, and for the
+            # waveguide to extend to goal_y_position
+            # THIS IS ONLY FOR THE TWO CENTRAL WAVEGUIDES
+            path_length_difference = extra_wiggle_lengths[idx]
+            # placeholder in the meantime
+            physical_length = goal_x_positions[idx] - parameters['min_radius']
+            total_length = physical_length + path_length_difference # total length of wiggles
 
-            wg.add_bend(np.pi/2, parameters['min_radius'])
-            wg.add_straight_segment(idx * parameters['wg_sep'])
+            wg.add_straight_segment_until_x(goal_x_positions[idx]
+                                            - parameters['min_radius']) # DELETE AND ADD WIGGLES HERE
+
+        wg.add_bend(-np.pi/2, parameters['min_radius'])
+        wg.add_straight_segment((3-idx) * parameters['wg_sep'])
+
     wgs = wgs[::-1]
     return wgs
 
