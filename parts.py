@@ -174,9 +174,10 @@ def wgs_to_fiber_array(
         # radius = 50.
         # target_path_length = total_length
         # target_crow_length = physical_length
-        # wgAdd_EulerWiggle(wgs[idx], radius=radius,
+        # wgAdd_EulerWiggle(wg, radius=radius,
         #                   target_path_length=target_path_length, target_crow_length=target_crow_length,
         #                   internal_angle_mod=0.0, N_turns=3, mirrored=False, resolution=200)
+
 
         wg.add_bend(-first_bend, min_radius)
         wg.add_straight_segment_until_y(coupler_positions[0][1])
@@ -1121,14 +1122,14 @@ def build_curve(wgs,
             physical_length = goal_x_positions[idx] - parameters['min_radius']
             total_length = physical_length + path_length_difference # total length of wiggles
 
-            wg.add_straight_segment_until_x(goal_x_positions[idx]
-                                            - parameters['min_radius']) # DELETE AND ADD WIGGLES HERE
+            # wg.add_straight_segment_until_x(goal_x_positions[idx]
+            #                                 - parameters['min_radius']) # DELETE AND ADD WIGGLES HERE
 
             ###### ADDED PART -  NOT WORKING: CROW LENGTH SEEMS TOO SMALL OR RADIUS TOO BIG + gives other ghdhelpers errors
             # radius = parameters['min_radius']
             # target_path_length = total_length
             # target_crow_length = physical_length
-            # wgAdd_EulerWiggle(wgs[idx], radius=radius,
+            # wgAdd_EulerWiggle(wg, radius=radius,
             #                   target_path_length=target_path_length, target_crow_length=target_crow_length,
             #                   internal_angle_mod=0.0, N_turns=3, mirrored=False, resolution=200)
 

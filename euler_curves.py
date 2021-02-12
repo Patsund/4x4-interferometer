@@ -296,8 +296,8 @@ def EulerWiggle_Points(start_point=(0.0, 0.0),
         # If any bends are required, find the parameter's root
         if N_turns >= 1:
             radius = brentq(frootR, r_min, r_max, args=(internal_angle_mod, N_turns))
-        else:
-            print('No bends are required')
+        # else:
+        #     print('No bends are required')
 
     elif result == 'path':
         # Function reflecting optimal path length
