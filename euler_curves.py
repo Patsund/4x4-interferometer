@@ -2,8 +2,7 @@ import numpy as np
 from scipy.special import fresnel
 from scipy.optimize import brentq
 
-
-# DEG2RAD = 2*np.pi/360.0
+from gdshelpers.parts.waveguide import Waveguide
 
 
 def rotate(point, angle, origin):
@@ -212,14 +211,16 @@ def EulerSBend_Points(start_point=(0.0, 0.0),
     return points
 
 
-def ShapeEulerWiggle(start_point=(0.0, 0.0),
-                     input_angle=0.0,
-                     radius=10.0,
-                     target_path_length=None,
-                     target_crow_length=None,
-                     internal_angle_mod=0.0,
-                     N_turns=10,
-                     resolution=150):
+def EulerWiggle_Points(start_point=(0.0, 0.0),
+                       input_angle=0.0,
+                       radius=10.0,
+                       target_path_length=None,
+                       target_crow_length=None,
+                       internal_angle_mod=0.0,
+                       N_turns=10,
+                       mirrored=False,
+                       resolution=200,
+                       inout_space=1):
     """Euler-bend-based wiggle, with N_turns lobes, each subtending 180+internal_angle_mod degrees."""
 
     # Check inputs
@@ -242,10 +243,6 @@ def ShapeEulerWiggle(start_point=(0.0, 0.0),
             angle_amount=-(np.pi + 2 * internal_angle_mod),
             clockwise=True)
 
-        # plt.plot([a[0] for a in io_bend], [a[1] for a in io_bend])
-        # plt.plot([a[0] for a in wiggle_bend], [a[1] for a in wiggle_bend])
-        # plt.show()
-
         # Get crow length (start-to-finish as the crow flies)
         cl_io = io_bend[-1][0]
         cl_wiggle = wiggle_bend[-1][0]
@@ -256,8 +253,8 @@ def ShapeEulerWiggle(start_point=(0.0, 0.0),
 
         # print '  get_lens R=%s A=%s N=%s'%(radius, internal_angle_mod, N_turns)
 
-        crow_length = 2 * cl_io + N_turns * cl_wiggle
-        path_length = 2 * l_io + N_turns * l_wiggle
+        crow_length = 2 * cl_io + N_turns * cl_wiggle + 2 * inout_space
+        path_length = 2 * l_io + N_turns * l_wiggle + 2 * inout_space
 
         return crow_length, path_length
 
@@ -279,7 +276,7 @@ def ShapeEulerWiggle(start_point=(0.0, 0.0),
 
     # Limits
     r_min = radius
-    r_max = 50.0
+    r_max = 1000.0
 
     a_min = -89.9 * (2 * np.pi / 360.)
     a_max = 25.0 * (2 * np.pi / 360.)
@@ -363,19 +360,15 @@ def ShapeEulerWiggle(start_point=(0.0, 0.0),
 
         # Check that requested geometry is reasonable
         if frootR(r_min, a_max, 1) > 0:
-            print('Error1')
             raise AttributeError(
                 'Requested geometry (crow length %s, with radius %s) is not possible.' % (target_crow_length, radius))
         elif target_path_length < target_crow_length:
-            print('Error2')
             raise AttributeError('Target path length (%s) must be greater than target crow length (%s).' % (
                 target_path_length, target_crow_length))
         elif target_path_length == target_crow_length:
-            print('Error3')
             N_turns = 0
             l_targ = target_crow_length
         elif frootA(a_min, radius, N_turns) * frootA(a_max, radius, N_turns) > 0:
-            print('Error4', frootA(a_min, radius, N_turns), frootA(a_max, radius, N_turns))
             raise AttributeError(
                 'Requested geometry (crow length %s, with path length %s) is not possible. Either increase '
                 'target_crow_length or decrease target_path_length.' % (
@@ -387,14 +380,14 @@ def ShapeEulerWiggle(start_point=(0.0, 0.0),
             # Restore wider-scope variables
             [radius, internal_angle_mod, N_turns] = stored_params
 
-    print('final:', radius, internal_angle_mod, N_turns)
-
     ###########
     # DRAWING #
     ###########
 
     # We move and rotate the shape after drawing it
     wiggle_pts = [np.array((0, 0))]
+    if inout_space>0:
+        wiggle_pts += [np.array((inout_space, 0))]
     angle = 0
 
     # If the optimisation returns no bends, shape is a straight line
@@ -405,13 +398,14 @@ def ShapeEulerWiggle(start_point=(0.0, 0.0),
     else:
         # Input bend
         da = (np.pi / 2. + internal_angle_mod)
-        wiggle_pts += EulerBendPoints_Relative(
-            start_point=wiggle_pts[-1],
+        temp_pts = EulerBendPoints_Relative(
+            start_point=(inout_space, 0),
             radius=radius,
             input_angle=angle,
             angle_amount=da,
             clockwise=False,
             resolution=resolution)
+        wiggle_pts += temp_pts[1:]
         angle += da
 
         # Wiggles
@@ -419,53 +413,97 @@ def ShapeEulerWiggle(start_point=(0.0, 0.0),
         for i in range(N_turns):
             clockwise = bool((i + 1) % 2)
             da = sign * (np.pi + 2 * internal_angle_mod)
-            wiggle_pts += EulerBendPoints_Relative(
+            temp_pts = EulerBendPoints_Relative(
                 start_point=wiggle_pts[-1],
                 radius=radius,
                 input_angle=angle,
                 angle_amount=da,
                 clockwise=clockwise,
                 resolution=resolution)
+            wiggle_pts += temp_pts[1:]
             angle += da
             sign *= -1
 
         # Output bend
         da = sign * (np.pi + internal_angle_mod)
-        wiggle_pts += EulerBendPoints_Relative(
+        temp_pts = EulerBendPoints_Relative(
             start_point=wiggle_pts[-1],
             radius=radius,
             input_angle=angle,
             angle_amount=-angle,
             clockwise=(not clockwise),
             resolution=resolution)
+        wiggle_pts += temp_pts[1:]
         angle += da
 
-    # Rotate shape according to start angle
 
+    last_pt = wiggle_pts[-1]
+    if inout_space > 0:
+        wiggle_pts += [np.array((last_pt[0] + inout_space, last_pt[1]))]
+
+    # Rotate and mirror shape according to start angle
+    if mirrored:
+        for pt in wiggle_pts:
+            pt[1] *= -1
     origin_pt = np.array(start_point)
     wiggle_pts = [rotate(pt, input_angle, (0, 0)) + origin_pt for pt in wiggle_pts]
 
     return wiggle_pts
 
 
+def wgAdd_EulerWiggle(wg,
+                      radius=10.0,
+                      target_path_length=None,
+                      target_crow_length=None,
+                      internal_angle_mod=0.0,
+                      N_turns=10,
+                      mirrored=False,
+                      resolution=200):
+    """add an EulerWiggle path compensation to a gdshelpers waveguide."""
+    wiggle_pts = EulerWiggle_Points(start_point=(0.0, 0.0),
+                       input_angle=0.0,
+                       radius=radius,
+                       target_path_length=target_path_length,
+                       target_crow_length=target_crow_length,
+                       internal_angle_mod=internal_angle_mod,
+                       N_turns=N_turns,
+                       mirrored=mirrored,
+                       resolution=resolution)
+    wiggle_pts = [tuple(pt) for pt in wiggle_pts]
+    wg.add_parameterized_path(wiggle_pts)
+
+
 if __name__ == "__main__":
+
     import matplotlib.pyplot as plt
+    from gdshelpers.geometry.chip import Cell
+    from gdshelpers.parts.port import Port
+
+    #########################################################
+    ##########   Tests bends curves and plot them   #########
+    #########################################################
 
     start_point = (0., 0.)
-    radius = 10.0
-    input_angle = 0
+    radius = 50.0
+    input_angle = 0.  # np.pi / 2
     output_angle = np.pi / 3.4
     clockwise = False
     resolution = 200.0
 
-    asd = ShapeEulerWiggle(start_point=start_point,
-                           input_angle=input_angle,
-                           radius=radius,
-                           target_path_length=800,
-                           target_crow_length=200,
-                           internal_angle_mod=0.0,
-                           N_turns=5,
-                           resolution=200)
+    target_path_length = 510
+    target_crow_length = 500
+    N_turns = 5
+    mirrored = False
+
+    asd = EulerWiggle_Points(start_point=start_point,
+                             input_angle=input_angle,
+                             radius=radius,
+                             target_path_length=target_path_length,
+                             target_crow_length=target_crow_length,
+                             internal_angle_mod=0.0,
+                             N_turns=N_turns,
+                             mirrored=mirrored,
+                             resolution=resolution)
 
     # asd = EulerSBend_Points(start_point=start_point,
     #                         offset=-30,
@@ -496,3 +534,24 @@ if __name__ == "__main__":
     ax.legend()
     ax.set_aspect('equal')
     plt.show()
+
+    #########################################################
+    ##########       Tests with GDShelpers          #########
+    #########################################################
+
+    wg = Waveguide.make_at_port(Port((0, 0), angle=np.pi / 2, width=1.3))
+    wg.add_straight_segment(radius)
+    wg.add_bend(-np.pi/3, radius, final_width=1.5)
+
+    wgAdd_EulerWiggle(wg,
+                      radius=radius,
+                      target_path_length=target_path_length,
+                      target_crow_length=target_crow_length,
+                      internal_angle_mod=0.0,
+                      N_turns=N_turns,
+                      mirrored=mirrored,
+                      resolution=resolution)
+
+    cell = Cell('CELL')
+    cell.add_to_layer(1, wg)  # red
+    cell.show()

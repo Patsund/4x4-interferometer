@@ -9,6 +9,7 @@ from gdshelpers.geometry.shapely_adapter import geometric_union
 from gdshelpers.parts.coupler import GratingCoupler
 from gdshelpers.parts.spiral import Spiral
 from shapely.geometry import Polygon
+from euler_curves import wgAdd_EulerWiggle
 
 std_coupler_params = {
     'width': 0.5,
@@ -157,12 +158,26 @@ def wgs_to_fiber_array(
         # third bend then heading towards gcs
         wg.add_bend(-first_bend, min_radius)
 
-        wg.add_straight_segment_until_x(coupler_positions[idx][0]
-                                        + np.sin(first_bend) * min_radius)
 
         # ADD WIGGLES HERE the extra distance added should be equal to
         # extra distance
         extra_distance = max_distance - wg_distances[idx]
+
+        wg.add_straight_segment_until_x(coupler_positions[idx][0]
+                                        + np.sin(first_bend) * min_radius)  # DELETE PART AND ADD WIGGLES HERE
+
+
+
+        ###### ADDED PART -  NOT WORKING: CROW LENGTH SEEMS TOO SMALL OR RADIUS TOO BIG + gives other ghdhelpers errors
+        # physical_length = abs(wg.current_port.x - (coupler_positions[idx][0] + np.sin(first_bend) * min_radius))
+        # total_length = physical_length+extra_distance
+        # radius = 50.
+        # target_path_length = total_length
+        # target_crow_length = physical_length
+        # wgAdd_EulerWiggle(wgs[idx], radius=radius,
+        #                   target_path_length=target_path_length, target_crow_length=target_crow_length,
+        #                   internal_angle_mod=0.0, N_turns=3, mirrored=False, resolution=200)
+
         wg.add_bend(-first_bend, min_radius)
         wg.add_straight_segment_until_y(coupler_positions[0][1])
         total_bounds = update_bounds(total_bounds,
@@ -764,12 +779,12 @@ def phase_shifter_electrodes(
     bounds = (np.inf, np.inf, -np.inf, -np.inf)
     wf_line_bounds = (np.inf, np.inf, -np.inf, -np.inf)
 
-    if reference_port.angle == np.pi/2:
+    if np.isclose(reference_port.angle, np.pi/2):
         crossing_angle = np.pi
         if direction == -1:
             reference_port.origin[1] = (reference_port.origin[1]
                                         + electrode_length)
-    elif reference_port.angle == -np.pi/2:
+    elif np.isclose(reference_port.angle, -np.pi/2):
         crossing_angle = 0
         if direction == 1:
             reference_port.origin[1] = (reference_port.origin[1]
@@ -1029,7 +1044,16 @@ def section_2_dcs_electrodes(
         # ADD WIGGLES HERE: need the path length to be
         # equal to path_length_difference, and for the
         # waveguide to extend to goal_y_position
+
         wgs[idx].add_straight_segment(abs(goal_y_position-current_y_position))  # DELETE THIS AND ADD CMP
+
+        ###### ADDED PART -  NOT WORKING: SOME OF THE LENGTHS SEEM WRONG
+        # radius = parameters['min_radius']
+        # target_path_length = path_length_difference
+        # target_crow_length = abs(goal_y_position-current_y_position)
+        # wgAdd_EulerWiggle(wgs[idx], radius=radius,
+        #                   target_path_length=target_path_length, target_crow_length=target_crow_length,
+        #                   internal_angle_mod=0.0, N_turns=3, mirrored=False, resolution=200)
     return electrodes
 
 
@@ -1099,6 +1123,14 @@ def build_curve(wgs,
 
             wg.add_straight_segment_until_x(goal_x_positions[idx]
                                             - parameters['min_radius']) # DELETE AND ADD WIGGLES HERE
+
+            ###### ADDED PART -  NOT WORKING: CROW LENGTH SEEMS TOO SMALL OR RADIUS TOO BIG + gives other ghdhelpers errors
+            # radius = parameters['min_radius']
+            # target_path_length = total_length
+            # target_crow_length = physical_length
+            # wgAdd_EulerWiggle(wgs[idx], radius=radius,
+            #                   target_path_length=target_path_length, target_crow_length=target_crow_length,
+            #                   internal_angle_mod=0.0, N_turns=3, mirrored=False, resolution=200)
 
         wg.add_bend(-np.pi/2, parameters['min_radius'])
         wg.add_straight_segment((3-idx) * parameters['wg_sep'])
