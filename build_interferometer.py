@@ -103,4 +103,4 @@ _ = wgs_to_fiber_array(
     is_incoupling=False
 )
 
-cell.save('../4x4_secondgen.gds')
+cell.save('4x4_secondgen.gds')
