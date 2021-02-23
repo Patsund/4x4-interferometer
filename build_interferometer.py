@@ -15,9 +15,9 @@ from parts import add_markers_to_bottom_of_cell
 cell = Cell('MZI_active')
 
 wg_width = 0.5
-wafer_min_max = (0, 7200)
 
 electrode_wg_sep = 62.5
+second_x_middle = 8 * 2 * 127
 
 inport_0 = Port((-electrode_wg_sep/2 - 25, 0), np.pi/2, wg_width)
 inport_1 = Port((-electrode_wg_sep/2, 0), np.pi/2, wg_width)
@@ -38,19 +38,23 @@ wgs, _ = build_interferometer(
     electrode_layer=10,
     electrode_wf_layer=102,
     electrode_contact_pad_coordinates=[],
-    second_x_middle=2 * 127,
+    second_x_middle=second_x_middle,
     total_bounds=(np.inf, np.inf, -np.inf, -np.inf),
     mm_wg_width=1,
     mm_taper_length=30,
+    contact_pad_dims=[250, 250],
+    contact_pad_sep=160,
+    connector_start_y=7120,
+    # wg_sep=50,
     electrode_wg_sep=electrode_wg_sep
 )
 
 # fiber_array
 gc_pitch = 127
-gc_leeway = 100
-wg_sep = 25
+gc_leeway = 125
+wg_sep = 75
 min_radius = 50
-starting_point = -gc_pitch * 2.5
+starting_point = second_x_middle/2 - gc_pitch * 3.5
 ports = [wg.current_port for wg in wgs]
 gc_y = (device_inports[0].origin[1]
         - min_radius
@@ -66,6 +70,7 @@ incoupling_bounds = wgs_to_fiber_array(
     coupler_positions=grating_coupler_positions[:4],
     min_radius=min_radius,
     gc_leeway=gc_leeway,
+    delay_length=1350,
     wg_sep=wg_sep,
     wg_layer=9,
     wf_layer=100,
@@ -85,38 +90,17 @@ _ = wf_line_from_bounds(
             axis=1
 )
 
-add_markers_to_bottom_of_cell(cell=cell,
-                              wf_bounds=incoupling_wf_bounds,
-                              device_bottom_bound=incoupling_bounds[1],
-                              marker_dims=20,
-                              marker_layer_1=3,
-                              marker_layer_2=4,
-                              marker_protection_layer=15)
-
-outcoupling_bounds = wgs_to_fiber_array(
+_ = wgs_to_fiber_array(
     cell=cell,
     ports=ports,
     coupler_positions=grating_coupler_positions[4:],
     min_radius=min_radius,
     gc_leeway=gc_leeway,
+    delay_length=1350,
     wg_sep=wg_sep,
     wg_layer=9,
     wf_layer=100,
     is_incoupling=False
 )
 
-outcoupling_wf_bounds = [outcoupling_bounds[0]-gc_pitch/2+15,
-                         outcoupling_bounds[1]-15,
-                         outcoupling_bounds[2]+15,
-                         outcoupling_bounds[3]]
-
-_ = wf_line_from_bounds(
-            cell=cell,
-            bounds=outcoupling_wf_bounds,
-            wf_maxlength=1040,
-            wf_layer=100,
-            axis=1
-)
-
-cell.save('4x4_secondgen.gds')
-cell.show()
+cell.save('../4x4_secondgen.gds')

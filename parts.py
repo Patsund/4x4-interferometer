@@ -11,6 +11,8 @@ from gdshelpers.parts.spiral import Spiral
 from shapely.geometry import Polygon
 from euler_curves import wgAdd_EulerWiggle
 
+# new version
+
 std_coupler_params = {
     'width': 0.5,
     'full_opening_angle': np.deg2rad(90),
@@ -30,11 +32,11 @@ def add_markers_to_top(cell,
                        marker_layer_1,
                        marker_layer_2,
                        marker_protection_layer):
-    marker_positions_1 = [(wf_bounds[0] + 3*marker_dims,
-                           wf_bounds[3] - 3*marker_dims),
-                          (wf_bounds[2] - 3*marker_dims,
-                           wf_bounds[3] - 3*marker_dims),
-                          (wf_bounds[2] - 3*marker_dims,
+    marker_positions_1 = [(wf_bounds[0] + 1.5*marker_dims,
+                           wf_bounds[3] - 1.5*marker_dims),
+                          (wf_bounds[2] - 1.5*marker_dims,
+                           wf_bounds[3] - 1.5*marker_dims),
+                          (wf_bounds[2] - 1.5*marker_dims,
                            device_top_bound + 80
                            + 3*marker_dims)]
     marker_positions_2 = [(marker_positions_1[0][0] + marker_dims*3,
@@ -106,88 +108,221 @@ def wgs_to_fiber_array(
     coupler_positions,
     min_radius,
     gc_leeway,
+    delay_length,
     wg_sep,
     wg_layer,
     wf_layer,
     is_incoupling
 ):
     total_bounds = (np.inf, np.inf, -np.inf, -np.inf)
-    wgs = [Waveguide.make_at_port(prt) for prt in ports]
+    first_line_bounds = list(total_bounds).copy()
+    wgs_device = [Waveguide.make_at_port(prt) for prt in ports]
+    coupler_ports = [Port(position, -np.pi/2, ports[0].width)
+                     for position in coupler_positions]
+    wgs_couplers = [Waveguide.make_at_port(prt)
+                    for prt in coupler_ports[::-1]]
+    for prt in coupler_ports:
+        prt.angle = np.pi/2
+        gc = GratingCoupler.make_traditional_coupler_at_port(
+            prt, **std_coupler_params
+        )
+        cell.add_to_layer(wg_layer, gc)
     first_bend = np.pi/2
-    wg_distances = [0 for _ in range(len(wgs))]
+    delay_start = ports[-1].origin[0] + min_radius
+    gc_delay_start = coupler_ports[-1].origin[0] + min_radius
     if is_incoupling:
         first_bend = -np.pi/2
-        coupler_positions = coupler_positions[::-1]
-    if not is_incoupling:
-        wgs = wgs[::-1]
-#         edge_position = coupler_positions[0][0]
-    for idx, wg in enumerate(wgs):
-        # this calculated distance is wrong by about 0.02,
-        # which I think is okay
-        distance = (2 * min_radius*np.pi  # x
-                    + abs(coupler_positions[-1][0]
-                          - wgs[idx].current_port.origin[0])
-                    + abs(coupler_positions[-1][0]
-                          - coupler_positions[idx][0])
-                    - 2*min_radius
-                    + 2*gc_leeway
-                    + 2*(3-idx) * wg_sep
-                    + abs(wgs[idx].current_port.origin[1]  # y
-                          - coupler_positions[0][1])
-                    - 4*min_radius
-                    + 2*(3-idx)*wg_sep)
-        wg_distances[idx] = distance
-    max_distance = max(wg_distances)
-
-    for idx, wg in enumerate(wgs):
+        delay_start = ports[0].origin[0] - min_radius
+        gc_delay_start = coupler_ports[0].origin[0] - min_radius
+    path_lengths = [0 for _ in range(len(ports))]
+    for idx, wg in enumerate(wgs_device):
         if is_incoupling:
             wg._current_port.angle = -np.pi/2
-        wg.add_straight_segment(wg_sep*idx)
+            wg.add_straight_segment(wg_sep*idx)
+        else:
+            wg.add_straight_segment(wg_sep*(3-idx))
         # first bend then heading away from structure
         wg.add_bend(first_bend, min_radius)
-        wg.add_straight_segment_until_x(coupler_positions[-1][0]
-                                        + np.sin(first_bend) *
-                                        (gc_leeway
-                                         + (3-idx)*wg_sep
-                                         - min_radius)
-                                        )
-        # second bend then heading downwards
+        wg.add_straight_segment_until_x(delay_start)
+        path_lengths[idx] += wg.length
+    for idx, wg in enumerate(wgs_couplers):
+        if is_incoupling:
+            wg.add_straight_segment(wg_sep*(3-idx))
+        else:
+            wg.add_straight_segment(wg_sep*idx)
+        wg.add_bend(first_bend, min_radius)
+        wg.add_straight_segment_until_x(gc_delay_start)
+        path_lengths[idx] += wg.length
+    delay_bend_wg_ports = [Port(
+        (wg.current_port.origin[0]
+         + np.cos(wg.current_port.angle)*delay_length,
+         wg.current_port.origin[1]),
+        wg.current_port.angle,
+        wg.current_port.width
+    ) for wg in wgs_device]
+    wgs_delay_bend = [Waveguide.make_at_port(prt)
+                      for prt in delay_bend_wg_ports]
+    for idx, wg in enumerate(wgs_delay_bend):
+        if is_incoupling:
+            wg.add_straight_segment(wg_sep*(3-idx))
+        else:
+            wg.add_straight_segment(wg_sep*idx)
         wg.add_bend(-first_bend, min_radius)
-        wg.add_straight_segment_until_y(coupler_positions[0][1]
-                                        - (3-idx)*wg_sep)
-        # third bend then heading towards gcs
-        wg.add_bend(-first_bend, min_radius)
-
-
-        # ADD WIGGLES HERE the extra distance added should be equal to
-        # extra distance
-        extra_distance = max_distance - wg_distances[idx]
-
-        wg.add_straight_segment_until_x(coupler_positions[idx][0]
-                                        + np.sin(first_bend) * min_radius)  # DELETE PART AND ADD WIGGLES HERE
-
-
-
-        ###### ADDED PART -  NOT WORKING: CROW LENGTH SEEMS TOO SMALL OR RADIUS TOO BIG + gives other ghdhelpers errors
-        # physical_length = abs(wg.current_port.x - (coupler_positions[idx][0] + np.sin(first_bend) * min_radius))
-        # total_length = physical_length+extra_distance
-        # radius = 50.
-        # target_path_length = total_length
-        # target_crow_length = physical_length
-        # wgAdd_EulerWiggle(wg, radius=radius,
-        #                   target_path_length=target_path_length, target_crow_length=target_crow_length,
-        #                   internal_angle_mod=0.0, N_turns=3, mirrored=False, resolution=200)
-
-
-        wg.add_bend(-first_bend, min_radius)
-        wg.add_straight_segment_until_y(coupler_positions[0][1])
-        total_bounds = update_bounds(total_bounds,
-                                     wg.get_shapely_outline().bounds)
-        cell.add_to_layer(wg_layer, wg)
-        grating_coupler = GratingCoupler.make_traditional_coupler_at_port(
-            wg.current_port, **std_coupler_params
+        wg.add_straight_segment_until_y(
+            wgs_couplers[idx].current_port.origin[1]
+            + min_radius
         )
-        cell.add_to_layer(wg_layer, grating_coupler)
+        wg.add_bend(-first_bend, min_radius)
+        if is_incoupling:
+            wg.add_straight_segment(wg_sep*(3-idx))
+        else:
+            wg.add_straight_segment(wg_sep*idx)
+        path_lengths[idx] += wg.length
+    longest_path_length = max(path_lengths)
+    second_delay_crow_length = abs(
+        wgs_delay_bend[0].current_port.origin[0]
+        - wgs_couplers[0].current_port.origin[0]
+    )
+    first_delay_proportion = (
+        delay_length
+        / (delay_length + second_delay_crow_length)
+    )
+    for idx, wg in enumerate(wgs_device):
+        target_path_length = (
+            first_delay_proportion
+            * (longest_path_length - path_lengths[idx])
+            + delay_length
+        )
+        wgAdd_EulerWiggle(
+                wg,
+                radius=min_radius,
+                target_path_length=target_path_length,
+                target_crow_length=delay_length,
+                internal_angle_mod=0.0,
+                N_turns=7,
+                resolution=200,
+                mirrored=is_incoupling,
+            )
+        first_line_bounds = list(update_bounds(
+            first_line_bounds,
+            wg.get_shapely_outline().bounds
+        ))
+    if is_incoupling:
+        first_line_bounds[0] = (
+            wgs_delay_bend[0].get_shapely_outline().bounds[0] - 5
+        )
+        first_line_bounds[2] += 5
+        first_line_bounds[1] -= 5
+        _ = wf_line_from_bounds(
+            cell=cell,
+            bounds=first_line_bounds,
+            wf_maxlength=1040,
+            wf_layer=wf_layer,
+            axis=0,
+            direction=-1
+        )
+        second_line_bounds = [
+            first_line_bounds[0],
+            wgs_delay_bend[0].get_shapely_outline().bounds[1] - 5,
+            wgs_couplers[0].current_port.origin[0],
+            first_line_bounds[1]
+        ]
+        _ = wf_line_from_bounds(
+            cell=cell,
+            bounds=second_line_bounds,
+            wf_maxlength=1040,
+            wf_layer=wf_layer,
+            axis=0
+        )
+        coupler_bounds = [
+            second_line_bounds[2],
+            second_line_bounds[1],
+            (coupler_ports[-1].origin[0]
+             + 127/2 - 10),
+            second_line_bounds[1]+1040
+        ]
+        _ = wf_line_from_bounds(
+            cell=cell,
+            bounds=coupler_bounds,
+            wf_maxlength=1040,
+            wf_layer=wf_layer
+        )
+        add_markers_to_top(
+            cell=cell,
+            wf_bounds=coupler_bounds,
+            device_top_bound=coupler_ports[0].origin[1]+50,
+            marker_dims=20,
+            marker_layer_1=3,
+            marker_layer_2=4,
+            marker_protection_layer=15
+        )
+
+    else:
+        first_line_bounds[2] = (
+            wgs_delay_bend[-1].get_shapely_outline().bounds[2]
+        )
+        first_line_bounds[0] -= 5
+        first_line_bounds[2] += 5
+        first_line_bounds[1] -= 5
+        _ = wf_line_from_bounds(
+            cell=cell,
+            bounds=first_line_bounds,
+            wf_maxlength=1040,
+            wf_layer=wf_layer,
+            axis=0
+        )
+        second_line_bounds = [
+            wgs_couplers[0].current_port.origin[0],
+            wgs_couplers[-1].get_shapely_outline().bounds[1] - 10,
+            first_line_bounds[2],
+            first_line_bounds[1]
+        ]
+        _ = wf_line_from_bounds(
+            cell=cell,
+            bounds=second_line_bounds,
+            wf_maxlength=1040,
+            wf_layer=wf_layer,
+            axis=0,
+            direction=-1
+        )
+        coupler_bounds = [
+            (coupler_ports[0].origin[0]
+             - 127/2 + 10),
+            second_line_bounds[1],
+            second_line_bounds[0],
+            (coupler_ports[-1].origin[1]
+             + 50)
+        ]
+        _ = wf_line_from_bounds(
+            cell=cell,
+            bounds=coupler_bounds,
+            wf_maxlength=1040,
+            wf_layer=wf_layer
+        )
+
+    for idx, wg in enumerate(wgs_delay_bend):
+        target_path_length = (
+            (1-first_delay_proportion)
+            * (longest_path_length - path_lengths[idx])
+            + second_delay_crow_length
+        )
+        wgAdd_EulerWiggle(
+                wg,
+                radius=min_radius,
+                target_path_length=target_path_length,
+                target_crow_length=second_delay_crow_length,
+                internal_angle_mod=0.0,
+                N_turns=9,
+                resolution=200,
+                mirrored=(not is_incoupling)
+            )
+    for idx in range(len(wgs_delay_bend)):
+        cell.add_to_layer(
+            wg_layer,
+            wgs_device[idx],
+            wgs_couplers[idx],
+            wgs_delay_bend[idx]
+        )
     return total_bounds
 
 
@@ -257,13 +392,15 @@ def deexpand_wgs(wgs, global_x_middle, parameters):
         else:
             s_y_length = wg.current_port.origin[0] - desired_x_position[idx]
         s_x_length = parameters['sine_s_x']
-        wg.add_parameterized_path(path=lambda t: (t * s_x_length, .5
-                                                  * (np.cos(np.pi * t) - 1)
-                                                  * s_y_length),
-                                  path_derivative=lambda t: (
+        wg.add_parameterized_path(
+            path=lambda t: (t * s_x_length, .5
+                            * (np.cos(np.pi * t) - 1)
+                            * s_y_length),
+            path_derivative=lambda t: (
                                       s_x_length, -np.pi * .5
                                       * np.sin(np.pi * t) * s_y_length
-                                  ))
+            )
+        )
     return
 
 
@@ -413,31 +550,288 @@ def build_kinks(cell,
     return kink_2_line_bounds, next_kink
 
 
+def build_wrap_kinks(
+    cell,
+    left_wg,
+    signal_wg,
+    right_wg,
+    kink,
+    wg_top,
+    electrode_layer,
+    electrode_wf_layer,
+    previous_line_bounds,
+    left_side,
+    parameters
+):
+    if kink == [-1, -1]:
+        if left_side:
+            kink = [(signal_wg.current_port.origin[0]
+                     - 2 * parameters['electrode_pitch']),
+                    (wg_top + 2*parameters['electrode_pitch'])]
+        else:
+            kink = [(signal_wg.current_port.origin[0]
+                     + 2 * parameters['electrode_pitch']),
+                    (wg_top + 2*parameters['electrode_pitch'])]
+    # FOLLOWING IS JUST build_kink() WITH SMALL ADJUSTMENTS
+    initial_angle = left_wg.current_port.angle
+    if left_side:
+        kink_1_line_bounds = [np.inf,
+                              np.inf,
+                              previous_line_bounds[0],
+                              -np.inf]
+        wf_direction = -1
+    else:
+        kink_1_line_bounds = [previous_line_bounds[2],
+                              np.inf,
+                              -np.inf,
+                              -np.inf]
+        wf_direction = 1
+    left_wg.add_straight_segment_until_x(kink[0]
+                                         - parameters['electrode_pitch'])
+    if left_side:
+        kink_1_line_bounds[0] = (left_wg.current_port.origin[0]
+                                 - parameters['wf_leeways'][0]/2)
+        kink_1_line_bounds[1] = (left_wg.current_port.origin[1]
+                                 - left_wg.current_port.width/2)
+    else:
+        kink_1_line_bounds[3] = (left_wg.current_port.origin[1]
+                                 + left_wg.current_port.width/2)
+    # 90 degree turn
+    left_wg._current_port.origin[0] = (left_wg.current_port.origin[0]
+                                       - np.cos(left_wg.current_port.angle)
+                                       * left_wg.current_port.width/2.0)
+    left_wg._current_port.angle = np.pi/2
+    # straight segment to the next turn
+    left_wg.add_straight_segment_until_y(kink[1]
+                                         - np.cos(initial_angle)
+                                         * parameters['electrode_pitch'])
+    # 90 degree turn
+    left_wg._current_port.angle = initial_angle + np.pi
+    left_wg._current_port.origin[0] = (left_wg._current_port.origin[0]
+                                       + np.cos(initial_angle)
+                                       * left_wg.current_port.width/2)
+
+    # signal_wg
+    signal_wg.add_straight_segment_until_x(kink[0])
+    # 90 degree turn
+    signal_wg._current_port.origin[0] = (signal_wg.current_port.origin[0]
+                                         - np.cos(signal_wg.current_port.angle)
+                                         * signal_wg.current_port.width/2.0)
+    signal_wg._current_port.angle = np.pi/2
+    # straight segment to the next turn
+    signal_wg.add_straight_segment_until_y(kink[1])
+    # 90 degree turn
+    signal_wg._current_port.angle = initial_angle + np.pi
+    signal_wg._current_port.origin[0] = (signal_wg._current_port.origin[0]
+                                         + np.cos(initial_angle)
+                                         * signal_wg.current_port.width/2)
+
+    # right_wg
+    right_wg.add_straight_segment_until_x(kink[0]
+                                          + parameters['electrode_pitch'])
+    if not left_side:
+        kink_1_line_bounds[2] = (right_wg.current_port.origin[0]
+                                 + parameters['wf_leeways'][0]/2)
+        kink_1_line_bounds[1] = (right_wg.current_port.origin[1]
+                                 - right_wg.current_port.width/2)
+    else:
+        kink_1_line_bounds[3] = (right_wg.current_port.origin[1]
+                                 + right_wg.current_port.width/2)
+    # 90 degree turn
+    right_wg._current_port.origin[0] = (right_wg.current_port.origin[0]
+                                        - np.cos(right_wg.current_port.angle)
+                                        * right_wg.current_port.width/2.0)
+    right_wg._current_port.angle = np.pi/2
+    # straight segment to the next turn
+    right_wg.add_straight_segment_until_y(kink[1]
+                                          + np.cos(initial_angle)
+                                          * parameters['electrode_pitch'])
+    # 90 degree turn
+    right_wg._current_port.angle = initial_angle + np.pi
+    right_wg._current_port.origin[0] = (right_wg._current_port.origin[0]
+                                        + np.cos(initial_angle)
+                                        * right_wg.current_port.width/2)
+    _ = wf_line_from_bounds(
+        cell=cell,
+        bounds=kink_1_line_bounds,
+        wf_maxlength=parameters['wf_maxlength'],
+        wf_layer=electrode_wf_layer,
+        axis=0,
+        direction=wf_direction
+    )
+    if not left_side:
+        kink_2_line_bounds = [
+            (left_wg.current_port.origin[0]
+             - left_wg.current_port.width
+             - parameters['wf_leeways'][0]/2),
+            kink_1_line_bounds[3],
+            (right_wg.current_port.origin[0]
+             + parameters['wf_leeways'][0]/2),
+            (left_wg.current_port.origin[1]
+             - left_wg.current_port.width/2
+             - parameters['wf_leeways'][1]/2)
+        ]
+        _ = wf_line_from_bounds(
+            cell=cell,
+            bounds=kink_2_line_bounds,
+            wf_maxlength=parameters['wf_maxlength'],
+            wf_layer=electrode_wf_layer
+        )
+        kink_2_line_bounds[0] = kink_2_line_bounds[2]
+        # Tells where the next electrodes should branch in order
+        # to run alongside this one
+        next_kink = [kink[0] + 3 * parameters['electrode_pitch'],
+                     right_wg.current_port.origin[1]
+                     + 2 * parameters['electrode_pitch']]
+    else:
+        kink_2_line_bounds = [
+            left_wg.current_port.origin[0] - parameters['wf_leeways'][0]/2,
+            kink_1_line_bounds[3],
+            (right_wg.current_port.origin[0]
+             + right_wg.current_port.width
+             + parameters['wf_leeways'][0]/2),
+            (right_wg.current_port.origin[1]
+             - right_wg.current_port.width/2
+             - parameters['wf_leeways'][1]/2)
+        ]
+        _ = wf_line_from_bounds(
+            cell=cell,
+            bounds=kink_2_line_bounds,
+            wf_maxlength=parameters['wf_maxlength'],
+            wf_layer=electrode_wf_layer
+        )
+        kink_2_line_bounds[2] = kink_2_line_bounds[0]
+        # Tells where the next electrodes should branch in order
+        # to run alongside this one
+        next_kink = [kink[0] - 3 * parameters['electrode_pitch'],
+                     left_wg.current_port.origin[1]
+                     + 2 * parameters['electrode_pitch']]
+    return kink_2_line_bounds, next_kink
+
+
 def electrode_connector(cell,
                         left_wg,
                         signal_wg,
                         right_wg,
                         kink,
+                        wg_top,
                         electrode_layer,
                         electrode_wf_layer,
                         connector_coordinates,
                         previous_line_bounds,
                         left_side,
-                        parameters):
+                        parameters,
+                        probe_connector=False):
     # Collect electrodes to save space
+    next_kink = [-1, -1]
     if kink != [-1, -1]:
-        previous_line_bounds, next_kink = build_kinks(
-            cell,
-            left_wg,
-            signal_wg,
-            right_wg,
-            kink,
-            electrode_layer,
-            electrode_wf_layer,
-            previous_line_bounds,
-            left_side,
-            parameters
-        )
+        if (left_side
+            and not (
+                kink[0] + parameters['electrode_pitch']
+                > (
+                  connector_coordinates[0]
+                  + parameters['connector_probe_pitch']
+                  )
+                    )):
+            if (
+                abs(kink[0] - connector_coordinates[0])
+                < parameters['connector_probe_pitch']
+                + signal_wg.current_port.width
+            ):
+                kink[0] = (connector_coordinates[0]
+                           - parameters['connector_probe_pitch']
+                           - signal_wg.current_port.width)
+            previous_line_bounds, next_kink = build_wrap_kinks(
+                cell,
+                left_wg,
+                signal_wg,
+                right_wg,
+                kink,
+                wg_top,
+                electrode_layer,
+                electrode_wf_layer,
+                previous_line_bounds,
+                left_side,
+                parameters
+            )
+            left_side = False
+        elif (not left_side
+              and not kink[0] - parameters['electrode_pitch'] < (
+                  connector_coordinates[0]
+                  - parameters['connector_probe_pitch']
+              )):
+            if (
+                abs(kink[0] - connector_coordinates[0])
+                < parameters['connector_probe_pitch']
+                + signal_wg.current_port.width
+            ):
+                kink[0] = (connector_coordinates[0]
+                           + parameters['connector_probe_pitch']
+                           + signal_wg.current_port.width)
+            previous_line_bounds, next_kink = build_wrap_kinks(
+                cell,
+                left_wg,
+                signal_wg,
+                right_wg,
+                kink,
+                wg_top,
+                electrode_layer,
+                electrode_wf_layer,
+                previous_line_bounds,
+                left_side,
+                parameters
+            )
+            left_side = True
+        else:
+            previous_line_bounds, next_kink = build_kinks(
+                cell,
+                left_wg,
+                signal_wg,
+                right_wg,
+                kink,
+                electrode_layer,
+                electrode_wf_layer,
+                previous_line_bounds,
+                left_side,
+                parameters
+            )
+    else:
+        if (
+            left_side
+            and connector_coordinates[0] > signal_wg.current_port.origin[0]
+        ):
+            previous_line_bounds, next_kink = build_wrap_kinks(
+                cell,
+                left_wg,
+                signal_wg,
+                right_wg,
+                kink,
+                wg_top,
+                electrode_layer,
+                electrode_wf_layer,
+                previous_line_bounds,
+                left_side,
+                parameters
+            )
+            left_side = False
+        elif (
+            not left_side
+            and connector_coordinates[0] < signal_wg.current_port.origin[0]
+        ):
+            previous_line_bounds, next_kink = build_wrap_kinks(
+                cell,
+                left_wg,
+                signal_wg,
+                right_wg,
+                kink,
+                wg_top,
+                electrode_layer,
+                electrode_wf_layer,
+                previous_line_bounds,
+                left_side,
+                parameters
+            )
+            left_side = True
 
     if left_side:
         first_line_bounds = [-1,
@@ -461,67 +855,84 @@ def electrode_connector(cell,
         wf_direction = 1
 
     # left_wg
-    left_wg_goal_x = (connector_coordinates[0]
-                      - parameters['connector_probe_pitch'])
+    if probe_connector:
+        left_wg_goal_x = (connector_coordinates[0]
+                          - parameters['connector_probe_pitch'])
+    else:
+        left_wg_goal_x = (connector_coordinates[0]
+                          - parameters['contact_pad_dims'][0]/2
+                          - parameters['electrode_pad_seps'][0]
+                          - left_wg.current_port.width/2)
     left_wg.add_straight_segment_until_x(left_wg_goal_x)
     if not left_side:
         first_line_bounds[2] = (left_wg.current_port.origin[0]
                                 - left_wg.current_port.width/2
                                 - parameters['connector_probe_dims'][0]/2
-                                - parameters['wf_leeways'][0]/2)
-        _ = wf_line_from_bounds(
-                cell=cell,
-                bounds=first_line_bounds,
-                wf_maxlength=parameters['wf_maxlength'],
-                wf_layer=electrode_wf_layer,
-                axis=0,
-                direction=wf_direction
-            )
+                                - parameters['wf_leeways'][0]/4)
+        if (
+            first_line_bounds[2] - first_line_bounds[0]
+            < parameters['electrode_pitch'] + parameters['electrode_width']
+           ):
+            first_line_bounds[2] = first_line_bounds[0]
+        else:
+            _ = wf_line_from_bounds(
+                    cell=cell,
+                    bounds=first_line_bounds,
+                    wf_maxlength=parameters['wf_maxlength'],
+                    wf_layer=electrode_wf_layer,
+                    axis=0,
+                    direction=wf_direction
+                )
     # 90 degree turn
-    left_wg._current_port.origin[0] = (left_wg.current_port.origin[0]
-                                       - np.cos(left_wg.current_port.angle)
-                                       * left_wg.current_port.width/2.0)
     left_wg._current_port.angle = np.pi/2
     left_wg._current_port.origin[1] = (left_wg._current_port.origin[1]
-                                       + left_wg.current_port.width/2.0)
+                                       - left_wg.current_port.width/2.0)
 
     # signal_wg (which is also the center wg)
     signal_wg_goal_x = connector_coordinates[0]
     signal_wg.add_straight_segment_until_x(signal_wg_goal_x)
     # 90 degree turn
-    signal_wg._current_port.origin[0] = (signal_wg.current_port.origin[0]
-                                         - np.cos(signal_wg.current_port.angle)
-                                         * signal_wg.current_port.width/2.0)
     signal_wg._current_port.angle = np.pi/2
     signal_wg._current_port.origin[1] = (signal_wg._current_port.origin[1]
-                                         + signal_wg.current_port.width/2.0)
+                                         - signal_wg.current_port.width/2.0)
 
     # right_wg
-    right_wg_goal_x = (connector_coordinates[0]
-                       + parameters['connector_probe_pitch'])
+    if probe_connector:
+        right_wg_goal_x = (connector_coordinates[0]
+                           + parameters['connector_probe_pitch'])
+    else:
+        right_wg_goal_x = (connector_coordinates[0]
+                           + parameters['contact_pad_dims'][0]/2
+                           + parameters['electrode_pad_seps'][0]
+                           + right_wg.current_port.width/2)
     right_wg.add_straight_segment_until_x(right_wg_goal_x)
     if left_side:
         first_line_bounds[0] = (right_wg.current_port.origin[0]
                                 + right_wg.current_port.width/2
                                 + parameters['connector_probe_dims'][0]/2
-                                + parameters['wf_leeways'][0]/2)
-        _ = wf_line_from_bounds(
-                cell=cell,
-                bounds=first_line_bounds,
-                wf_maxlength=parameters['wf_maxlength'],
-                wf_layer=electrode_wf_layer,
-                axis=0,
-                direction=wf_direction
-            )
+                                + parameters['wf_leeways'][0]/4)
+        if (
+            first_line_bounds[2] - first_line_bounds[0]
+            < parameters['electrode_pitch'] + parameters['electrode_width']
+           ):
+            first_line_bounds[0] = first_line_bounds[2]
+        else:
+            _ = wf_line_from_bounds(
+                    cell=cell,
+                    bounds=first_line_bounds,
+                    wf_maxlength=parameters['wf_maxlength'],
+                    wf_layer=electrode_wf_layer,
+                    axis=0,
+                    direction=wf_direction
+                )
     # 90 degree turn
-    right_wg._current_port.origin[0] = (right_wg.current_port.origin[0]
-                                        - np.cos(right_wg.current_port.angle)
-                                        * right_wg.current_port.width/2.0)
+    right_wg._current_port.origin[1] = (right_wg._current_port.origin[1]
+                                        - right_wg.current_port.width/2.0)
     right_wg._current_port.angle = np.pi/2
 
     # Tells where the next electrodes should branch in order
     # to run alongside this one
-    if kink == [-1, -1]:
+    if next_kink == [-1, -1]:
         if left_side:
             next_kink = [right_wg_goal_x - parameters['electrode_pitch'],
                          left_wg.current_port.origin[1]
@@ -531,8 +942,45 @@ def electrode_connector(cell,
             next_kink = [left_wg_goal_x + parameters['electrode_pitch'],
                          right_wg.current_port.origin[1]
                          - 2 * parameters['electrode_pitch']]
+    if probe_connector:
+        electrode_probe_and_pad(
+            cell,
+            left_wg,
+            signal_wg,
+            right_wg,
+            electrode_layer,
+            electrode_wf_layer,
+            connector_coordinates,
+            first_line_bounds,
+            left_side,
+            parameters
+        )
+    else:
+        electrode_pad(
+            cell,
+            left_wg,
+            signal_wg,
+            right_wg,
+            electrode_layer,
+            electrode_wf_layer,
+            connector_coordinates,
+            first_line_bounds,
+            left_side,
+            parameters
+        )
+    return next_kink
 
-    # get the wgs to the start of the probe connector
+
+def electrode_probe_and_pad(cell,
+                            left_wg,
+                            signal_wg,
+                            right_wg,
+                            electrode_layer,
+                            electrode_wf_layer,
+                            connector_coordinates,
+                            first_line_bounds,
+                            left_side,
+                            parameters):
     left_wg.add_straight_segment_until_y(
         connector_coordinates[1],
         final_width=parameters['connector_probe_dims'][0]
@@ -564,6 +1012,11 @@ def electrode_connector(cell,
                               (left_wg.current_port.origin[1]
                                - parameters['electrode_width']
                                - parameters['wf_leeways'][1]/2)]
+        if second_line_bounds[2] < (right_wg.current_port.origin[0]
+                                    + right_wg.current_port.width/2):
+            second_line_bounds[2] = (right_wg.current_port.origin[0]
+                                     + right_wg.current_port.width/2
+                                     + parameters['wf_leeways'][0]/2)
     else:
         second_line_bounds = [first_line_bounds[2],
                               first_line_bounds[1],
@@ -573,6 +1026,11 @@ def electrode_connector(cell,
                               (left_wg.current_port.origin[1]
                                - parameters['electrode_width']
                                - parameters['wf_leeways'][1]/2)]
+        if second_line_bounds[0] > (left_wg.current_port.origin[0]
+                                    - left_wg.current_port.width/2):
+            second_line_bounds[0] = (left_wg.current_port.origin[0]
+                                     - left_wg.current_port.width/2
+                                     - parameters['wf_leeways'][0]/2)
 
     _ = wf_line_from_bounds(
                 cell=cell,
@@ -580,40 +1038,55 @@ def electrode_connector(cell,
                 wf_maxlength=parameters['wf_maxlength'],
                 wf_layer=electrode_wf_layer
             )
-    final_wf_bounds = [-1,
-                       second_line_bounds[3],
-                       -1,
-                       second_line_bounds[3] + parameters['wf_maxlength']]
+    first_pad_wf_bounds = [-1,
+                           second_line_bounds[3],
+                           -1,
+                           -1]
+    second_pad_wf_bounds = [-1, -1, -1, -1]
 
     # electrode_connector
     # make sure the contact pad does not touch the ground electrodes
     signal_wg.add_straight_segment(parameters['electrode_pad_seps'][1])
-    contact_pad_y = signal_wg.current_port.origin[1]
+    # contact_pad_y = signal_wg.current_port.origin[1]
     signal_wg._current_port.width = parameters['contact_pad_dims'][0]
     signal_wg.add_straight_segment(parameters['contact_pad_dims'][1])
-    # left_wg should go to the the ground contact pad
-    # clear away from the signal contact pad
+
+    # Route the left wg to the ground pad
     left_wg._current_port.width = parameters['electrode_width']
-    left_wg._current_port.angle = np.pi
-    left_wg._current_port.origin[1] = (left_wg.current_port.origin[1]
-                                       - left_wg.current_port.width/2)
-    left_wg.add_straight_segment_until_x(signal_wg.current_port.origin[0]
-                                         - parameters['contact_pad_dims'][0]
-                                         - parameters['contact_pad_sep'])
-    # get the start of the contact pad to the same position as the signal
-    # pad
-    left_wg._current_port.angle = np.pi/2
-    left_wg._current_port.origin[1] = (left_wg.current_port.origin[1]
-                                       - left_wg.current_port.width/2)
-    left_wg.add_straight_segment_until_y(contact_pad_y)
-    # ground contact pad
+
+    x_goal_length = abs((signal_wg.current_port.origin[0]
+                         - parameters['contact_pad_dims'][0]/2
+                         - parameters['electrode_pad_seps'][0])
+                        - left_wg.current_port.origin[0])
+    if x_goal_length > parameters['connector_probe_dims'][0]/2:
+        left_wg._current_port.angle = np.pi
+        left_wg._current_port.origin[1] = (left_wg.current_port.origin[1]
+                                           - left_wg.current_port.width/2)
+        left_wg.add_straight_segment(x_goal_length)
+        left_wg._current_port.angle = np.pi/2
+        left_wg._current_port.origin[1] = (left_wg.current_port.origin[1]
+                                           - left_wg.current_port.width/2)
+    else:
+        left_wg._current_port.origin[0] = (
+            left_wg.current_port.origin[0]
+            - parameters['connector_probe_dims'][0]/2
+            + left_wg.current_port.width/2
+        )
+
+    left_wg.add_straight_segment_until_y(signal_wg.current_port.origin[1]
+                                         + parameters['contact_pad_sep']
+                                         + left_wg.current_port.width/2)
+    first_pad_wf_bounds[0] = (left_wg.current_port.origin[0]
+                              - left_wg.current_port.width/2
+                              - parameters['wf_leeways'][0])
     left_wg._current_port.width = parameters['contact_pad_dims'][0]
     left_wg.add_straight_segment(parameters['contact_pad_dims'][1])
-    final_wf_bounds[0] = (left_wg.current_port.origin[0]
-                          - left_wg.current_port.width/2
-                          - parameters['wf_leeways'][0])
-    # route the right wg to the ground pad
-    # clear away from the signal contact pad
+    second_pad_wf_bounds[0] = (left_wg.current_port.origin[0]
+                               - left_wg.current_port.width/2
+                               - parameters['wf_leeways'][0])
+    second_pad_wf_bounds[2] = (left_wg.current_port.origin[0]
+                               + left_wg.current_port.width/2
+                               + 60)
     right_wg._current_port.width = parameters['electrode_width']
 
     x_goal_length = (signal_wg.current_port.origin[0]
@@ -624,9 +1097,7 @@ def electrode_connector(cell,
         right_wg._current_port.angle = 0
         right_wg._current_port.origin[1] = (right_wg.current_port.origin[1]
                                             - right_wg.current_port.width/2)
-        right_wg.add_straighw_segment(x_goal_length)
-#         right_wg.add_straight_segment_until_x(signal_wg.current_port.origin[0]
-#                                               + x_goal_length)
+        right_wg.add_straight_segment(x_goal_length)
         right_wg._current_port.angle = np.pi/2
         right_wg._current_port.origin[1] = (right_wg.current_port.origin[1]
                                             - right_wg.current_port.width/2)
@@ -637,37 +1108,194 @@ def electrode_connector(cell,
             - right_wg.current_port.width/2
         )
 
-    right_wg.add_straight_segment_until_y(left_wg.current_port.origin[1]
-                                          + parameters['electrode_pad_seps'][0]
-                                          + right_wg.current_port.width/2)
-    final_wf_bounds[2] = (right_wg.current_port.origin[0]
-                          + right_wg.current_port.width/2
-                          + parameters['wf_leeways'][0])
+    right_wg.add_straight_segment_until_y(
+        signal_wg.current_port.origin[1]
+        + parameters['electrode_pad_seps'][0]
+        + right_wg.current_port.width/2
+    )
+    first_pad_wf_bounds[2] = (right_wg.current_port.origin[0]
+                              + right_wg.current_port.width/2
+                              + parameters['wf_leeways'][0])
 
     right_wg._current_port.angle = np.pi
     right_wg._current_port.origin[0] = (right_wg.current_port.origin[0]
                                         + right_wg.current_port.width/2)
-    right_wg.add_straight_segment_until_x(left_wg.current_port.origin[0])
-    right_wg._current_port.angle = -np.pi/2
-    right_wg._current_port.origin[1] = (right_wg.current_port.origin[1]
-                                        + right_wg.current_port.width/2)
-    right_wg.add_straight_segment_until_y(left_wg.current_port.origin[1])
+    right_wg.add_straight_segment_until_x(left_wg.current_port.origin[0]
+                                          + parameters['contact_pad_dims'][0]/2
+                                          - right_wg.current_port.width/2)
+    first_pad_wf_bounds[3] = (
+        right_wg.current_port.origin[1]
+        + right_wg.current_port.width
+    )
+    right_wg._current_port.angle = np.pi/2
+    right_wg._current_port.origin[1] = (
+        right_wg.current_port.origin[1]
+        - right_wg.current_port.width/2
+    )
+    right_wg.add_straight_segment_until_y(signal_wg.current_port.origin[1]
+                                          + parameters['contact_pad_sep']
+                                          + right_wg.current_port.width/2)
     _ = wf_line_from_bounds(
                 cell=cell,
-                bounds=final_wf_bounds,
+                bounds=first_pad_wf_bounds,
+                wf_maxlength=parameters['wf_maxlength'],
+                wf_layer=electrode_wf_layer
+            )
+    second_pad_wf_bounds[1] = first_pad_wf_bounds[3]
+    second_pad_wf_bounds[3] = (first_pad_wf_bounds[3]
+                               + 650)
+    _ = wf_line_from_bounds(
+                cell=cell,
+                bounds=second_pad_wf_bounds,
                 wf_maxlength=parameters['wf_maxlength'],
                 wf_layer=electrode_wf_layer
             )
     # add markers
-    top_bound = right_wg.get_shapely_outline().bounds[3]
+    top_bound = left_wg.get_shapely_outline().bounds[3]
     add_markers_to_top(cell=cell,
-                       wf_bounds=final_wf_bounds,
+                       wf_bounds=second_pad_wf_bounds,
                        device_top_bound=top_bound,
                        marker_dims=parameters['marker_dims'],
                        marker_layer_1=parameters['mk_layer_1'],
                        marker_layer_2=parameters['mk_layer_2'],
                        marker_protection_layer=parameters['mk_layer_3'])
-    return next_kink
+
+
+def electrode_pad(cell,
+                  left_wg,
+                  signal_wg,
+                  right_wg,
+                  electrode_layer,
+                  electrode_wf_layer,
+                  connector_coordinates,
+                  first_line_bounds,
+                  left_side,
+                  parameters):
+    left_wg.add_straight_segment_until_y(
+        connector_coordinates[1]
+    )
+    signal_wg.add_straight_segment_until_y(
+        connector_coordinates[1]
+    )
+    right_wg.add_straight_segment_until_y(
+        connector_coordinates[1]
+    )
+
+    if left_side:
+        second_line_bounds = [(left_wg.current_port.origin[0]
+                               - left_wg.current_port.width/2
+                               - parameters['wf_leeways'][0]/2),
+                              first_line_bounds[1],
+                              first_line_bounds[0],
+                              (left_wg.current_port.origin[1]
+                               - parameters['electrode_width']
+                               - parameters['wf_leeways'][1]/2)]
+        if second_line_bounds[2] < (right_wg.current_port.origin[0]
+                                    + right_wg.current_port.width/2):
+            second_line_bounds[2] = (right_wg.current_port.origin[0]
+                                     + right_wg.current_port.width/2
+                                     + parameters['wf_leeways'][0]/2)
+    else:
+        second_line_bounds = [first_line_bounds[2],
+                              first_line_bounds[1],
+                              (right_wg.current_port.origin[0]
+                               + right_wg.current_port.width/2
+                               + parameters['wf_leeways'][0]/2),
+                              (left_wg.current_port.origin[1]
+                               - parameters['electrode_width']
+                               - parameters['wf_leeways'][1]/2)]
+        if second_line_bounds[0] > (left_wg.current_port.origin[0]
+                                    - left_wg.current_port.width/2):
+            second_line_bounds[0] = (left_wg.current_port.origin[0]
+                                     - left_wg.current_port.width/2
+                                     - parameters['wf_leeways'][0]/2)
+
+    _ = wf_line_from_bounds(
+                cell=cell,
+                bounds=second_line_bounds,
+                wf_maxlength=parameters['wf_maxlength'],
+                wf_layer=electrode_wf_layer
+            )
+    first_pad_wf_bounds = [-1,
+                           second_line_bounds[3],
+                           -1,
+                           -1]
+    second_pad_wf_bounds = [-1, -1, -1, -1]
+
+    # electrode_connector
+    # make sure the contact pad does not touch the ground electrodes
+    signal_wg.add_straight_segment(parameters['electrode_pad_seps'][1])
+    # contact_pad_y = signal_wg.current_port.origin[1]
+    signal_wg._current_port.width = parameters['contact_pad_dims'][0]
+    signal_wg.add_straight_segment(parameters['contact_pad_dims'][1])
+
+    left_wg.add_straight_segment_until_y(signal_wg.current_port.origin[1]
+                                         + parameters['contact_pad_sep']
+                                         + left_wg.current_port.width/2)
+    first_pad_wf_bounds[0] = (left_wg.current_port.origin[0]
+                              - left_wg.current_port.width/2
+                              - parameters['wf_leeways'][0])
+    left_wg._current_port.width = parameters['contact_pad_dims'][0]
+    left_wg.add_straight_segment(parameters['contact_pad_dims'][1])
+    second_pad_wf_bounds[0] = (left_wg.current_port.origin[0]
+                               - left_wg.current_port.width/2
+                               - parameters['wf_leeways'][0])
+    second_pad_wf_bounds[2] = (left_wg.current_port.origin[0]
+                               + left_wg.current_port.width/2
+                               + 60)
+    right_wg._current_port.width = parameters['electrode_width']
+
+    right_wg.add_straight_segment_until_y(
+        signal_wg.current_port.origin[1]
+        + parameters['electrode_pad_seps'][0]
+        + right_wg.current_port.width/2
+    )
+    first_pad_wf_bounds[2] = (right_wg.current_port.origin[0]
+                              + right_wg.current_port.width/2
+                              + parameters['wf_leeways'][0])
+
+    right_wg._current_port.angle = np.pi
+    right_wg._current_port.origin[0] = (right_wg.current_port.origin[0]
+                                        + right_wg.current_port.width/2)
+    right_wg.add_straight_segment_until_x(left_wg.current_port.origin[0]
+                                          + parameters['contact_pad_dims'][0]/2
+                                          - right_wg.current_port.width/2)
+    first_pad_wf_bounds[3] = (
+        right_wg.current_port.origin[1]
+        + right_wg.current_port.width
+    )
+    right_wg._current_port.angle = np.pi/2
+    right_wg._current_port.origin[1] = (
+        right_wg.current_port.origin[1]
+        - right_wg.current_port.width/2
+    )
+    right_wg.add_straight_segment_until_y(signal_wg.current_port.origin[1]
+                                          + parameters['contact_pad_sep']
+                                          + right_wg.current_port.width/2)
+    _ = wf_line_from_bounds(
+                cell=cell,
+                bounds=first_pad_wf_bounds,
+                wf_maxlength=parameters['wf_maxlength'],
+                wf_layer=electrode_wf_layer
+            )
+    second_pad_wf_bounds[1] = first_pad_wf_bounds[3]
+    second_pad_wf_bounds[3] = (first_pad_wf_bounds[3]
+                               + 650)
+    _ = wf_line_from_bounds(
+                cell=cell,
+                bounds=second_pad_wf_bounds,
+                wf_maxlength=parameters['wf_maxlength'],
+                wf_layer=electrode_wf_layer
+            )
+    # add markers
+    top_bound = left_wg.get_shapely_outline().bounds[3]
+    add_markers_to_top(cell=cell,
+                       wf_bounds=second_pad_wf_bounds,
+                       device_top_bound=top_bound,
+                       marker_dims=parameters['marker_dims'],
+                       marker_layer_1=parameters['mk_layer_1'],
+                       marker_layer_2=parameters['mk_layer_2'],
+                       marker_protection_layer=parameters['mk_layer_3'])
 
 
 def phase_shifter_and_dc_wg(
@@ -681,6 +1309,7 @@ def phase_shifter_and_dc_wg(
     electrode_layer,
     electrode_wf_layer,
     stagger_separation=0,
+    ending_taper=True,
     **kwargs
 ):
     parameters = {
@@ -700,12 +1329,23 @@ def phase_shifter_and_dc_wg(
     }
     fix_dict(parameters, kwargs)
     for idx, wg in enumerate(wgs):
+        increase_length = False
         # straight segment for the electrode
+        if (
+            wg.current_port.width < parameters['mm_wg_width']
+            and parameters['mm_taper_length'] > 0
+        ):
+            wg.add_straight_segment(parameters['mm_taper_length'],
+                                    parameters['mm_wg_width'])
+            electrode_length -= parameters['mm_taper_length']
+            increase_length = True
         wg.add_straight_segment(electrode_length+stagger_separation)
 
         # taper for mm assuming the wg is mm during electrodes
         if parameters['mm_taper_length'] > 0:
             wg.add_straight_segment(parameters['mm_taper_length'], sm_wg_width)
+            if increase_length:
+                electrode_length += parameters['mm_taper_length']
 
         # directional coupler
         x_length = parameters['sine_s_x']
@@ -736,7 +1376,7 @@ def phase_shifter_and_dc_wg(
                                       x_length, -np.pi * .5
                                       * np.sin(np.pi * t) * y_length
                                   ))
-        if parameters['mm_taper_length'] > 0:
+        if parameters['mm_taper_length'] > 0 and ending_taper:
             wg.add_straight_segment(parameters['mm_taper_length'],
                                     parameters['mm_wg_width'])
 
@@ -920,6 +1560,7 @@ def section_1_dcs_electrodes(
     coupler_sep,
     coupler_length,
     sm_wg_width,
+    ending_taper,
     parameters
 ):
     # First two waveguides
@@ -959,6 +1600,7 @@ def section_1_dcs_electrodes(
                             electrode_layer=electrode_layer,
                             electrode_wf_layer=electrode_wf_layer,
                             stagger_separation=stagger_separation,
+                            ending_taper=ending_taper,
                             **parameters)
 
     # Second two waveguides
@@ -984,6 +1626,7 @@ def section_1_dcs_electrodes(
                             electrode_layer=electrode_layer,
                             electrode_wf_layer=electrode_wf_layer,
                             stagger_separation=0,
+                            ending_taper=ending_taper,
                             **parameters)
     return [electrodes_1, electrodes_2]
 
@@ -1000,7 +1643,9 @@ def section_2_dcs_electrodes(
     coupler_sep,
     coupler_length,
     sm_wg_width,
+    ending_taper,
     parameters,
+    delay=True,
     extra_wiggle_lengths=[-1, -1, -1, -1]
 ):
     # Interacting waveguides
@@ -1031,113 +1676,42 @@ def section_2_dcs_electrodes(
                             wf_layer=wf_layer,
                             electrode_layer=electrode_layer,
                             electrode_wf_layer=electrode_wf_layer,
+                            ending_taper=ending_taper,
                             **parameters)
 
     # Delayed waveguides
+    if not delay:
+        return electrodes
     for idx in (0, 3):
         current_y_position = wgs[idx].current_port.origin[1]
         goal_y_position = wgs[1].current_port.origin[1]
+
         if extra_wiggle_lengths == [-1, -1, -1, -1]:
             path_length_difference = wgs[1].length - wgs[idx].length
         else:
-            path_length_difference = extra_wiggle_lengths[idx] + abs(goal_y_position-current_y_position)
+            path_length_difference = (
+                extra_wiggle_lengths[idx]
+                + abs(goal_y_position-current_y_position)
+            )
 
-        # ADD WIGGLES HERE: need the path length to be
-        # equal to path_length_difference, and for the
-        # waveguide to extend to goal_y_position
-
-        wgs[idx].add_straight_segment(abs(goal_y_position-current_y_position))  # DELETE THIS AND ADD CMP
-
-        ###### ADDED PART -  NOT WORKING: SOME OF THE LENGTHS SEEM WRONG
-        # radius = parameters['min_radius']
-        # target_path_length = path_length_difference
-        # target_crow_length = abs(goal_y_position-current_y_position)
-        # wgAdd_EulerWiggle(wgs[idx], radius=radius,
-        #                   target_path_length=target_path_length, target_crow_length=target_crow_length,
-        #                   internal_angle_mod=0.0, N_turns=3, mirrored=False, resolution=200)
-    return electrodes
-
-
-def build_curve(wgs,
-                next_section,
-                parameters,
-                extra_wiggle_lengths,
-                next_middle_point=-1):
-    current_middle_point = (wgs[0].current_port.origin[0]
-                            + wgs[-1].current_port.origin[0])/2
-    # allow to set manually
-    if next_middle_point == -1:
-        next_middle_point = (current_middle_point
-                             + 2*parameters['wg_sep']
-                             + 2.5*parameters['electrode_wg_sep'])
-    if next_section == 1:
-        goal_x_positions = [  # leftmost to rightmost
-                            (next_middle_point
-                             + 0.5*parameters['electrode_wg_sep']
-                             + parameters['wg_sep']),
-                            # #2 from left to #2 from right
-                            (next_middle_point
-                             + 0.5*parameters['electrode_wg_sep']),
-                            # #2 from right to #2 from left
-                            (next_middle_point
-                             - 0.5*parameters['electrode_wg_sep']),
-                            # rightmost to leftmost
-                            (next_middle_point
-                             - 0.5*parameters['electrode_wg_sep']
-                             - parameters['wg_sep'])
-                           ]
-    else:
-        goal_x_positions = [  # leftmost to rightmost
-                            (next_middle_point
-                             + 0.5*parameters['wg_sep']
-                             + parameters['electrode_wg_sep']),
-                            # #2 from left to #2 from right
-                            (next_middle_point
-                             + 0.5*parameters['wg_sep']),
-                            # #2 from right to #2 from left
-                            (next_middle_point
-                             - 0.5*parameters['wg_sep']),
-                            # rightmost to leftmost
-                            (next_middle_point
-                             - 0.5*parameters['wg_sep']
-                             - parameters['electrode_wg_sep'])
-                           ]
-    longest_path_length = -1
-    for idx, wg in enumerate(wgs):
-        # turn to the right
-        wg.add_straight_segment((3-idx) * parameters['wg_sep'])
-        wg.add_bend(-np.pi/2, parameters['min_radius'])
-        if idx == 0 or idx == 3:
-            wg.add_straight_segment((3-idx) * parameters['wg_sep'])
-            wg.add_straight_segment_until_x(goal_x_positions[idx]
-                                            - parameters['min_radius'])
-            longest_path_length = wg.length
+        radius = parameters['min_radius']
+        target_path_length = path_length_difference
+        target_crow_length = abs(goal_y_position-current_y_position)
+        if target_path_length > target_crow_length:
+            wgAdd_EulerWiggle(wgs[idx],
+                              radius=radius,
+                              target_path_length=target_path_length,
+                              target_crow_length=target_crow_length,
+                              internal_angle_mod=0.0,
+                              N_turns=3,
+                              mirrored=False,
+                              resolution=200)
         else:
-            # ADD WIGGLES HERE: need the path length to be
-            # equal to path_length_difference, and for the
-            # waveguide to extend to goal_y_position
-            # THIS IS ONLY FOR THE TWO CENTRAL WAVEGUIDES
-            path_length_difference = extra_wiggle_lengths[idx]
-            # placeholder in the meantime
-            physical_length = goal_x_positions[idx] - parameters['min_radius']
-            total_length = physical_length + path_length_difference # total length of wiggles
+            wgs[idx].add_straight_segment(
+                abs(goal_y_position - current_y_position)
+            )
 
-            # wg.add_straight_segment_until_x(goal_x_positions[idx]
-            #                                 - parameters['min_radius']) # DELETE AND ADD WIGGLES HERE
-
-            ###### ADDED PART -  NOT WORKING: CROW LENGTH SEEMS TOO SMALL OR RADIUS TOO BIG + gives other ghdhelpers errors
-            # radius = parameters['min_radius']
-            # target_path_length = total_length
-            # target_crow_length = physical_length
-            # wgAdd_EulerWiggle(wg, radius=radius,
-            #                   target_path_length=target_path_length, target_crow_length=target_crow_length,
-            #                   internal_angle_mod=0.0, N_turns=3, mirrored=False, resolution=200)
-
-        wg.add_bend(-np.pi/2, parameters['min_radius'])
-        wg.add_straight_segment((3-idx) * parameters['wg_sep'])
-
-    wgs = wgs[::-1]
-    return wgs
+    return electrodes
 
 
 def build_interferometer(
@@ -1164,6 +1738,7 @@ def build_interferometer(
         'wg_sep': 25,
         'electrode_wg_sep': 100,
         'last_layer': False,
+        'delay_line_length': 100,
         # For directional couplers and bends
         'sine_s_x': 60,
         # For electrode function
@@ -1174,7 +1749,7 @@ def build_interferometer(
         'electrode_taper_length': 30,
         'electrode_sep_y': 15,
         'electrode_pitch': 40,
-        'connector_start_y': 6650,
+        'connector_start_y': 8000,
         'connector_probe_dims': (80, 600),
         'connector_probe_pitch': 150,
         'contact_pad_dims': (250, 600),
@@ -1201,10 +1776,14 @@ def build_interferometer(
 
     # connector probe centers start coordinates
     global_x_middle = (x_middle + second_x_middle)/2
-    connector_center_separation = 2*(parameters['contact_pad_dims'][0]
-                                     + parameters['contact_pad_sep'])
-    left_connector_x_middle = global_x_middle - connector_center_separation/2
-    right_connector_x_middle = global_x_middle + connector_center_separation/2
+    connector_center_separation = (parameters['contact_pad_dims'][0]
+                                   + parameters['contact_pad_sep'])
+    left_connector_x_middle = (global_x_middle
+                               - 0.5 * (parameters['contact_pad_sep']
+                                        + parameters['contact_pad_dims'][0]))
+    right_connector_x_middle = (global_x_middle
+                                + 0.5 * (parameters['contact_pad_sep']
+                                         + parameters['contact_pad_dims'][0]))
     left_connector_coordinates = [(left_connector_x_middle
                                    - (5-idx)*connector_center_separation,
                                    parameters['connector_start_y'])
@@ -1233,6 +1812,7 @@ def build_interferometer(
             coupler_sep=coupler_sep,
             coupler_length=coupler_length,
             sm_wg_width=sm_wg_width,
+            ending_taper=(electrode_idx+1) % 2,
             parameters=parameters
         )
         left_side_electrodes[2*electrode_idx] = sec1_electrodes[0]
@@ -1240,28 +1820,26 @@ def build_interferometer(
     # First section 2
     # Expand the wgs first
     _, _ = expand_wgs_section_2(wgs, parameters)
-    electrode_idx = 4
-    # path lengths are equal at this point
-    sec_2_initial_path_lengths = [wg.length for wg in wgs]
-    sec2_electrodes = section_2_dcs_electrodes(
-        cell=cell,
-        wgs=wgs,
-        electrode_length=electrode_length,
-        wg_layer=wg_layer,
-        wf_layer=wf_layer,
-        electrode_layer=electrode_layer,
-        electrode_wf_layer=electrode_wf_layer,
-        connector_coordinates=left_connector_coordinates[electrode_idx],
-        coupler_sep=coupler_sep,
-        coupler_length=coupler_length,
-        sm_wg_width=sm_wg_width,
-        parameters=parameters,
-        extra_wiggle_lengths=[0, 0, 0, 0]
-    )
-    sec_2_intermediate_path_lengths = [wg.length for wg in wgs]
-    delta_path_lengths = [sec_2_intermediate_path_lengths[idx]
-                          - sec_2_initial_path_lengths[idx]
-                          for idx in range(len(wgs))]
+    for electrode_idx in range(4, 6):
+        sec2_electrodes = section_2_dcs_electrodes(
+            cell=cell,
+            wgs=wgs,
+            electrode_length=electrode_length,
+            wg_layer=wg_layer,
+            wf_layer=wf_layer,
+            electrode_layer=electrode_layer,
+            electrode_wf_layer=electrode_wf_layer,
+            connector_coordinates=left_connector_coordinates[electrode_idx],
+            coupler_sep=coupler_sep,
+            coupler_length=coupler_length,
+            sm_wg_width=sm_wg_width,
+            ending_taper=(electrode_idx+1) % 2,
+            parameters=parameters,
+            delay=False
+        )
+        left_side_electrodes[electrode_idx] = sec2_electrodes
+
+    # first and last mode delay lines
     curve_goal_x_positions = [
         # leftmost to rightmost
         (second_x_middle
@@ -1278,46 +1856,118 @@ def build_interferometer(
          - 0.5*parameters['electrode_wg_sep']
          - parameters['wg_sep'])
     ]
-    post_curve_path_lengths = [0 for _ in range(len(wgs))]
-    for idx, wg in enumerate(wgs):
-        post_curve_path_length = (
-            sec_2_intermediate_path_lengths[idx]
-            + delta_path_lengths[idx]
-            + 2 * (3-idx) * parameters['wg_sep']
-            + (curve_goal_x_positions[idx]
-               - wg.current_port.origin[0]
-               - 2*parameters['min_radius'])
-            + np.pi*parameters['min_radius']
-        )
-        post_curve_path_lengths[idx] = post_curve_path_length
-    extra_wiggle_lengths = [post_curve_path_lengths[0]
-                            - post_curve_path_lengths[idx]
-                            for idx in range(len(wgs))]
-    left_side_electrodes[electrode_idx] = sec2_electrodes
-    electrode_idx = 5
-    sec2_electrodes = section_2_dcs_electrodes(
-        cell=cell,
-        wgs=wgs,
-        electrode_length=electrode_length,
-        wg_layer=wg_layer,
-        wf_layer=wf_layer,
-        electrode_layer=electrode_layer,
-        electrode_wf_layer=electrode_wf_layer,
-        connector_coordinates=left_connector_coordinates[electrode_idx],
-        coupler_sep=coupler_sep,
-        coupler_length=coupler_length,
-        sm_wg_width=sm_wg_width,
-        parameters=parameters
+    wg_sep = 90
+    left_to_right = wgs[0]
+    if parameters['mm_taper_length'] > 0:
+        left_to_right.add_straight_segment(parameters['mm_taper_length'],
+                                           parameters['mm_wg_width'])
+    left_to_right.add_straight_segment_until_y(
+        wgs[1].current_port.origin[1]
+        + 3 * wg_sep
+        - parameters['mm_taper_length']
     )
-    left_side_electrodes[electrode_idx] = sec2_electrodes
-    # Add a curve for the next two sections
-    # First, make a line of write fields leading up to the start of the curve
+    if parameters['mm_taper_length'] > 0:
+        left_to_right.add_straight_segment(parameters['mm_taper_length'],
+                                           sm_wg_width)
+    left_to_right.add_bend(-np.pi/2, parameters['min_radius'])
+    if parameters['mm_taper_length'] > 0:
+        left_to_right.add_straight_segment(parameters['mm_taper_length'],
+                                           parameters['mm_wg_width'])
+    left_to_right.add_straight_segment_until_x(
+        curve_goal_x_positions[0]
+        - parameters['min_radius']
+        - parameters['mm_taper_length']
+    )
+    if parameters['mm_taper_length'] > 0:
+        left_to_right.add_straight_segment(parameters['mm_taper_length'],
+                                           sm_wg_width)
+    left_to_right.add_bend(-np.pi/2, parameters['min_radius'])
+    left_to_right.add_straight_segment(3*wg_sep)
+
+    longest_path_length = left_to_right.length
+    path_length = [0, 0, 0]
+    initial_crow_length = (
+        wgs[1].current_port.origin[1]
+        - wgs[3].current_port.origin[1]
+    )
+
+    for idx in range(1, 4):
+        curve_length = abs(
+            curve_goal_x_positions[idx]
+            - wgs[idx].current_port.origin[0]
+        )
+        path_length[idx-1] = (
+            wgs[idx].length
+            + np.pi * curve_length
+        )
+        if idx == 3:
+            radius = parameters['min_radius']
+            # initial_length = wgs[3].length
+            target_path_length = (
+                longest_path_length
+                - wgs[3].length
+                - np.pi * parameters['min_radius']
+                - curve_goal_x_positions[3]
+                + wgs[3].current_port.origin[0]
+                + 2*parameters['min_radius']
+            )
+            target_crow_length = initial_crow_length
+            wgAdd_EulerWiggle(
+                wgs[3],
+                radius=radius,
+                target_path_length=target_path_length,
+                target_crow_length=target_crow_length,
+                internal_angle_mod=0.0,
+                N_turns=49,
+                resolution=200,
+                mirrored=True
+            )
+            first_line_right_bound = (
+                wgs[3].get_shapely_outline().bounds[2]
+            )
+            # final_length = wgs[3].length
+            wgs[3].add_bend(-np.pi/2, parameters['min_radius'])
+            if parameters['mm_taper_length'] > 0:
+                wgs[3].add_straight_segment(parameters['mm_taper_length'],
+                                            parameters['mm_wg_width'])
+            wgs[3].add_straight_segment_until_x(
+                curve_goal_x_positions[3]
+                - parameters['min_radius']
+                - parameters['mm_taper_length']
+            )
+            if parameters['mm_taper_length'] > 0:
+                wgs[3].add_straight_segment(parameters['mm_taper_length'],
+                                            sm_wg_width)
+            wgs[3].add_bend(-np.pi/2, parameters['min_radius'])
+
+        else:
+            wgs[idx].add_straight_segment((3-idx) * wg_sep)
+            wgs[idx].add_bend(-np.pi/2, parameters['min_radius'])
+            target_path_length = (longest_path_length
+                                  - wgs[idx].length
+                                  - np.pi/2 * parameters['min_radius']
+                                  - (3-idx) * wg_sep)
+            target_crow_length = (curve_goal_x_positions[idx]
+                                  - wgs[idx].current_port.origin[0]
+                                  - parameters['min_radius'])
+            radius = parameters['min_radius']
+            wgAdd_EulerWiggle(
+                wgs[idx],
+                radius=radius,
+                target_path_length=target_path_length,
+                target_crow_length=target_crow_length,
+                internal_angle_mod=0.0,
+                N_turns=11,
+                mirrored=False,
+                resolution=200
+            )
+            wgs[idx].add_bend(-np.pi/2, parameters['min_radius'])
+            wgs[idx].add_straight_segment((3-idx) * wg_sep)
+
     x_extrema = (x_middle
                  - parameters['wg_sep']/2
                  - parameters['electrode_wg_sep'],
-                 x_middle
-                 + parameters['wg_sep']/2
-                 + parameters['electrode_wg_sep'])
+                 first_line_right_bound)
     wf_line_bounds = (x_extrema[0] - parameters['wf_leeways'][0],
                       initial_position_y,
                       x_extrema[1]
@@ -1330,27 +1980,21 @@ def build_interferometer(
         wf_layer=wf_layer
     )
     wg_wf_bounds = update_bounds(wg_wf_bounds, line_bounds)
-    # TODO: update the build_curve function to return wf_bounds
-    wgs = build_curve(wgs=wgs,
-                      next_section=1,
-                      parameters=parameters,
-                      extra_wiggle_lengths=extra_wiggle_lengths,
-                      next_middle_point=second_x_middle)
-    curve_top = (wf_line_bounds[3]
-                 + 3*parameters['wg_sep']
-                 + parameters['min_radius'])
     wf_line_bounds = [wf_line_bounds[0],
                       wf_line_bounds[3],
-                      (wgs[-1].current_port.origin[0]
+                      (wgs[0].current_port.origin[0]
                        + parameters['wf_leeways'][0]),
-                      curve_top+parameters['wf_leeways'][1]]
-    line_bounds = wf_line_from_bounds(
+                      (wgs[0].get_shapely_outline().bounds[3]
+                       + parameters['wf_leeways'][1])]
+    top_line_bounds = wf_line_from_bounds(
         cell=cell,
         bounds=wf_line_bounds,
-        wf_maxlength=parameters['wf_maxlength'],
-        wf_layer=wf_layer
+        wf_maxlength=(wf_line_bounds[2] - wf_line_bounds[0])/3,
+        wf_layer=wf_layer,
+        axis=0
     )
-    wg_wf_bounds = update_bounds(wg_wf_bounds, line_bounds)
+    wgs = wgs[::-1]
+    wg_wf_bounds = update_bounds(wg_wf_bounds, top_line_bounds)
     initial_position_y = wgs[0].current_port.origin[1]
     # Second section 1
     for electrode_idx in range(2):
@@ -1368,6 +2012,7 @@ def build_interferometer(
             coupler_sep=coupler_sep,
             coupler_length=coupler_length,
             sm_wg_width=sm_wg_width,
+            ending_taper=(electrode_idx+1) % 2,
             parameters=parameters
         )
         right_side_electrodes[2*electrode_idx] = sec1_electrodes[0]
@@ -1388,21 +2033,22 @@ def build_interferometer(
             coupler_sep=coupler_sep,
             coupler_length=coupler_length,
             sm_wg_width=sm_wg_width,
+            ending_taper=(electrode_idx+1) % 2,
             parameters=parameters
         )
         right_side_electrodes[electrode_idx] = sec2_electrodes
     # Add a second line of writefields following the waveguides
+    second_line_x_diff = (wgs[-1].get_shapely_outline().bounds[2]
+                          - second_x_middle)
     x_extrema = (second_x_middle
-                 - parameters['wg_sep']/2
-                 - parameters['electrode_wg_sep'],
+                 - second_line_x_diff,
                  second_x_middle
-                 + parameters['wg_sep']/2
-                 + parameters['electrode_wg_sep'])
+                 + second_line_x_diff)
     wf_line_bounds = (x_extrema[0] - parameters['wf_leeways'][0],
                       wgs[0].current_port.origin[1],
                       x_extrema[1]
                       + parameters['wf_leeways'][0],
-                      initial_position_y)
+                      top_line_bounds[1])
     line_bounds = wf_line_from_bounds(
         cell=cell,
         bounds=wf_line_bounds,
@@ -1410,7 +2056,7 @@ def build_interferometer(
         wf_layer=wf_layer
     )
     wg_wf_bounds = update_bounds(wg_wf_bounds, line_bounds)
-    for wg in wgs:
+    for idx, wg in enumerate(wgs):
         cell.add_to_layer(wg_layer, wg)
     kink = [-1, -1]
     for idx in range(5, -1, -1):
@@ -1424,6 +2070,7 @@ def build_interferometer(
                 signal_wg=signal_wg,
                 right_wg=long_wg,
                 kink=kink,
+                wg_top=top_line_bounds[3],
                 electrode_layer=electrode_layer,
                 electrode_wf_layer=electrode_wf_layer,
                 connector_coordinates=left_connector_coordinates[idx],
@@ -1438,6 +2085,7 @@ def build_interferometer(
                 signal_wg=signal_wg,
                 right_wg=short_wg,
                 kink=kink,
+                wg_top=top_line_bounds[3],
                 electrode_layer=electrode_layer,
                 electrode_wf_layer=electrode_wf_layer,
                 connector_coordinates=left_connector_coordinates[idx],
@@ -1457,6 +2105,7 @@ def build_interferometer(
                 signal_wg=signal_wg,
                 right_wg=short_wg,
                 kink=kink,
+                wg_top=top_line_bounds[3],
                 electrode_layer=electrode_layer,
                 electrode_wf_layer=electrode_wf_layer,
                 connector_coordinates=right_connector_coordinates[idx],
@@ -1471,6 +2120,7 @@ def build_interferometer(
                 signal_wg=signal_wg,
                 right_wg=long_wg,
                 kink=kink,
+                wg_top=top_line_bounds[3],
                 electrode_layer=electrode_layer,
                 electrode_wf_layer=electrode_wf_layer,
                 connector_coordinates=right_connector_coordinates[idx],
