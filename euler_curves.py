@@ -386,7 +386,7 @@ def EulerWiggle_Points(start_point=(0.0, 0.0),
 
     # We move and rotate the shape after drawing it
     wiggle_pts = [np.array((0, 0))]
-    if inout_space>0:
+    if inout_space > 0:
         wiggle_pts += [np.array((inout_space, 0))]
     angle = 0
 
@@ -436,7 +436,6 @@ def EulerWiggle_Points(start_point=(0.0, 0.0),
         wiggle_pts += temp_pts[1:]
         angle += da
 
-
     last_pt = wiggle_pts[-1]
     if inout_space > 0:
         wiggle_pts += [np.array((last_pt[0] + inout_space, last_pt[1]))]
@@ -461,20 +460,42 @@ def wgAdd_EulerWiggle(wg,
                       resolution=200):
     """add an EulerWiggle path compensation to a gdshelpers waveguide."""
     wiggle_pts = EulerWiggle_Points(start_point=(0.0, 0.0),
-                       input_angle=0.0,
-                       radius=radius,
-                       target_path_length=target_path_length,
-                       target_crow_length=target_crow_length,
-                       internal_angle_mod=internal_angle_mod,
-                       N_turns=N_turns,
-                       mirrored=mirrored,
-                       resolution=resolution)
+                                    input_angle=0.0,
+                                    radius=radius,
+                                    target_path_length=target_path_length,
+                                    target_crow_length=target_crow_length,
+                                    internal_angle_mod=internal_angle_mod,
+                                    N_turns=N_turns,
+                                    mirrored=mirrored,
+                                    resolution=resolution)
     wiggle_pts = [tuple(pt) for pt in wiggle_pts]
     wg.add_parameterized_path(wiggle_pts)
 
 
-if __name__ == "__main__":
+def wgAdd_EulerBend(wg,
+                    angle=np.pi / 2.,
+                    radius=10.0,
+                    clockwise=False,
+                    resolution=200,
+                    add_space=0.01):
+    """add an Euler bend to a gdshelpers waveguide."""
+    bend_pts_temp = EulerBendPoints_Relative(start_point=(0, 0),
+                                        radius=radius,
+                                        input_angle=0.0,
+                                        angle_amount=angle,
+                                        clockwise=clockwise,
+                                        resolution=resolution)
 
+    ## SP 06/03/2021: fixing bug to impose the correct output angle
+    bend_pts = [bend_pts_temp[0], bend_pts_temp[0] + (add_space, 0)]
+    bend_pts = bend_pts + bend_pts_temp[1:-2]
+    bend_pts = bend_pts + [bend_pts_temp[-1] - rotate((add_space, 0), angle, (0, 0)), bend_pts_temp[-1]]
+
+    bend_pts = [tuple(pt)for pt in bend_pts]
+    wg.add_parameterized_path(bend_pts)
+
+
+if __name__ == "__main__":
     import matplotlib.pyplot as plt
     from gdshelpers.geometry.chip import Cell
     from gdshelpers.parts.port import Port
@@ -541,7 +562,7 @@ if __name__ == "__main__":
 
     wg = Waveguide.make_at_port(Port((0, 0), angle=np.pi / 2, width=1.3))
     wg.add_straight_segment(radius)
-    wg.add_bend(-np.pi/3, radius, final_width=1.5)
+    wg.add_bend(-np.pi / 3, radius, final_width=1.5)
 
     wgAdd_EulerWiggle(wg,
                       radius=radius,
