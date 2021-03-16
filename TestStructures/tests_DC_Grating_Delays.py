@@ -18,6 +18,7 @@ from gdshelpers.helpers import id_to_alphanumeric
 from gdshelpers.geometry.chip import Cell
 # from gdshelpers.layout import GridLayout
 # from gdshelpers.parts.marker import CrossMarker
+from gdshelpers.parts.resonator import RingResonator
 
 import os
 import sys
@@ -54,6 +55,86 @@ opt_space = 127
 box_dist = 5
 
 euler_to_bend_coeff = 1.8703879865
+
+
+
+class Ring_Test:
+    def __init__(self, origin, label, gap, ring_r):
+        self.origin = origin
+        self.label = label
+
+        r_bend = 50
+        r_eff = r_bend / euler_to_bend_coeff
+
+        coupler_params = std_coupler_params.copy()
+
+        outports = [Port(self.origin + (opt_space * i, 0), np.pi / 2, wg_width) for i in (0, 1)]
+        gratingcouplers = [GratingCoupler.make_traditional_coupler_at_port(outport, **std_coupler_params) for outport in
+                           outports]
+
+        port = outports[0].inverted_direction
+
+        wg = Waveguide.make_at_port(port)
+        wgAdd_EulerBend(wg, np.pi/2., r_eff, False)
+
+        dist_straight = opt_space - 2 * r_bend
+        wg.add_straight_segment(dist_straight/2.)
+
+        ring_res = RingResonator.make_at_port(wg.current_port.inverted_direction, gap=gap, radius=ring_r)
+
+        wg.add_straight_segment(dist_straight/2.)
+
+        wgAdd_EulerBend(wg, np.pi / 2., r_eff, False)
+        wg.add_straight_segment_until_level_of_port(outports[1])
+
+        label = Text(self.origin + (opt_space/2., 0), 25, self.label, alignment='center-top')
+
+        # self.shapely_object = geometric_union([wg] + [label] + gratingcouplers)
+        self.shapely_object = geometric_union(gratingcouplers + [label] + [wg] + [ring_res])
+
+        self.comments = Text(self.origin + (60, 40), 10,
+                             'gap={:.2f}\nrad={:.2f}'.format(gap, ring_r),
+                             alignment='center-top')
+
+
+        x_cords = []
+        y_cords = []
+        box_disty = 2
+        for this_poly in self.shapely_object.geoms:
+            temp_x_cords, temp_y_cords = this_poly.exterior.coords.xy
+            x_cords = x_cords + list(temp_x_cords)
+            y_cords = y_cords + list(temp_y_cords)
+        x_max = max(x_cords) + box_dist
+        x_min = min(x_cords) - box_dist
+        y_max = max(y_cords) + box_disty
+        y_min = min(y_cords) - box_disty
+        box_size = (x_max - x_min, y_max - y_min)
+
+        box = Waveguide(((x_min + x_max) / 2., y_min), np.pi / 2, box_size[0])
+        box.add_straight_segment(box_size[1])
+        self.box = geometric_union([box])
+
+        self.markers = []
+        self.markers_copy = []
+        self.markers_protection = []
+
+    def get_shapely_object(self):
+        return self.shapely_object
+
+    def get_comments(self):
+        return self.comments
+
+    def get_box(self):
+        return self.box
+
+    def get_markers(self):
+        return self.markers
+
+    def get_markers_copy(self):
+        return self.markers_copy
+
+    def get_markers_protection(self):
+        return self.markers_protection
 
 
 class Efficiency_Grating:
@@ -93,7 +174,7 @@ class Efficiency_Grating:
 
         x_cords = []
         y_cords = []
-        box_disty = 2.5 * marker_dims
+        box_disty = 2 #2.5 * marker_dims
         for this_poly in self.shapely_object.geoms:
             temp_x_cords, temp_y_cords = this_poly.exterior.coords.xy
             x_cords = x_cords + list(temp_x_cords)
@@ -109,25 +190,28 @@ class Efficiency_Grating:
         self.box = geometric_union([box])
 
 
-        markers_dist = 50
-        marker_pos = [self.origin + (x_min + 1.2*marker_dims, y_min + 1.2*marker_dims) - self.origin,
-                      self.origin + (x_max - 1.2*marker_dims - markers_dist, y_min + 1.2*marker_dims) - self.origin,
-                      self.origin + (x_min + 1.2*marker_dims + markers_dist, y_max - 1.2*marker_dims) - self.origin]
-        marker_pos1 = [marker_pos[0] + (markers_dist, 0),
-                       marker_pos[1] + (markers_dist, 0),
-                       marker_pos[2] - (markers_dist, 0)]
-
-        markers = [SquareMarker.make_marker(position, marker_dims)
-                   for position in marker_pos]
-        self.markers = geometric_union(markers)
-
-        markers1 = [SquareMarker.make_marker(position, marker_dims)
-                    for position in marker_pos1]
-        self.markers_copy = geometric_union(markers1)
-
-        markers_protection = [SquareMarker.make_marker(position, 2 * marker_dims)
-                              for position in marker_pos + marker_pos1]
-        self.markers_protection = geometric_union(markers_protection)
+        # markers_dist = 50
+        # marker_pos = [self.origin + (x_min + 1.2*marker_dims, y_min + 1.2*marker_dims) - self.origin,
+        #               self.origin + (x_max - 1.2*marker_dims - markers_dist, y_min + 1.2*marker_dims) - self.origin,
+        #               self.origin + (x_min + 1.2*marker_dims + markers_dist, y_max - 1.2*marker_dims) - self.origin]
+        # marker_pos1 = [marker_pos[0] + (markers_dist, 0),
+        #                marker_pos[1] + (markers_dist, 0),
+        #                marker_pos[2] - (markers_dist, 0)]
+        #
+        # markers = [SquareMarker.make_marker(position, marker_dims)
+        #            for position in marker_pos]
+        # self.markers = geometric_union(markers)
+        #
+        # markers1 = [SquareMarker.make_marker(position, marker_dims)
+        #             for position in marker_pos1]
+        # self.markers_copy = geometric_union(markers1)
+        #
+        # markers_protection = [SquareMarker.make_marker(position, 2 * marker_dims)
+        #                       for position in marker_pos + marker_pos1]
+        # self.markers_protection = geometric_union(markers_protection)
+        self.markers = []
+        self.markers_copy = []
+        self.markers_protection = []
 
     def get_shapely_object(self):
         return self.shapely_object
@@ -248,25 +332,28 @@ class DirectionalCouplersTest:
         box.add_straight_segment(box_size[1])
         self.box = geometric_union([box])
 
-        markers_dist = 50
-        marker_pos = [self.origin + (-40, -85),
-                      self.origin + (110, -85+markers_dist),
-                      self.origin + (340, -85)]
-        marker_pos1 = [marker_pos[0] + (0, markers_dist),
-                       marker_pos[1] + (0, -markers_dist),
-                       marker_pos[2] + (0, markers_dist)]
-
-        markers = [SquareMarker.make_marker(position, marker_dims)
-                   for position in marker_pos]
-        self.markers = geometric_union(markers)
-
-        markers1 = [SquareMarker.make_marker(position, marker_dims)
-                    for position in marker_pos1]
-        self.markers_copy = geometric_union(markers1)
-
-        markers_protection = [SquareMarker.make_marker(position, 2 * marker_dims)
-                              for position in marker_pos + marker_pos1]
-        self.markers_protection = geometric_union(markers_protection)
+        # markers_dist = 50
+        # marker_pos = [self.origin + (-40, -85),
+        #               self.origin + (110, -85+markers_dist),
+        #               self.origin + (340, -85)]
+        # marker_pos1 = [marker_pos[0] + (0, markers_dist),
+        #                marker_pos[1] + (0, -markers_dist),
+        #                marker_pos[2] + (0, markers_dist)]
+        #
+        # markers = [SquareMarker.make_marker(position, marker_dims)
+        #            for position in marker_pos]
+        # self.markers = geometric_union(markers)
+        #
+        # markers1 = [SquareMarker.make_marker(position, marker_dims)
+        #             for position in marker_pos1]
+        # self.markers_copy = geometric_union(markers1)
+        #
+        # markers_protection = [SquareMarker.make_marker(position, 2 * marker_dims)
+        #                       for position in marker_pos + marker_pos1]
+        # self.markers_protection = geometric_union(markers_protection)
+        self.markers = []
+        self.markers_copy = []
+        self.markers_protection = []
 
     def get_shapely_object(self):
         return self.shapely_object
@@ -537,10 +624,15 @@ if __name__ == "__main__":
 
     devices = []
 
+    #### ADD RING TESTS
+    devices += [Ring_Test(np.array((420, 250)) * (x, y), id_to_alphanumeric(x, y), gap, ring_r)
+                for x, gap in enumerate(np.linspace(0.3, 1, 3))
+                for y, ring_r in enumerate(np.linspace(30, 80, 3))]
+
     #### ADD GRATING COUPLERS TESTS
-    devices += [Efficiency_Grating(np.array((420, 250)) * (x, y) + (5000, 2700), id_to_alphanumeric(x, y), period, ff)
-                for x, period in enumerate(np.linspace(0.88, 0.92, 3)) for y, ff in
-                enumerate(np.linspace(0.28, 0.33, 3))]
+    # devices += [Efficiency_Grating(np.array((420, 250)) * (x, y) + (5000, 2700), id_to_alphanumeric(x, y), period, ff)
+    #             for x, period in enumerate(np.linspace(0.88, 0.92, 3)) for y, ff in
+    #             enumerate(np.linspace(0.28, 0.33, 3))]
 
     #### ADD RINGS TESTS
     # devices += [DeviceCouplerRing(np.array((480, 580)) * (x, y) + (-380, 2700), id_to_alphanumeric(y, x), gap, radius)

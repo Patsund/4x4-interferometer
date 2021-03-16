@@ -11,7 +11,8 @@ from shapely.geometry import Polygon
 from gdshelpers.helpers import id_to_alphanumeric
 from utils import *
 from parts import interferometer_and_fiber_array
-from TestStructures.tests_DC_Grating_Delays import RectangularSpiral, DirectionalCouplersTest, Efficiency_Grating
+from TestStructures.tests_DC_Grating_Delays import RectangularSpiral, \
+    DirectionalCouplersTest, Efficiency_Grating, Ring_Test
 
 
 
@@ -35,7 +36,7 @@ inport_2 = Port((electrode_wg_sep/2, 0), np.pi/2, wg_width)
 inport_3 = Port((electrode_wg_sep/2 + 25, 0), np.pi/2, wg_width)
 device_inports = [inport_0, inport_1, inport_2, inport_3]
 
-start_x = inport_0.origin[0] + 3500
+start_x = inport_0.origin[0] + 3500  # 3900should be + 3500 for 150 probe pitch
 device_inports_2 = [None, None, None, None]
 device_inports_2[:2] = [
     Port((start_x + idx*25, 0), np.pi/2, wg_width)
@@ -43,6 +44,7 @@ device_inports_2[:2] = [
 ]
 start_x += 25 + electrode_wg_sep
 first_x_middle_2 = start_x - electrode_wg_sep/2
+print('first_x_middle_2', first_x_middle_2)
 second_x_middle_2 = first_x_middle_2 + second_x_middle
 device_inports_2[2:] = [
     Port((start_x + idx*25, 0), np.pi/2, wg_width)
@@ -116,10 +118,11 @@ _ = interferometer_and_fiber_array(
     electrode_wg_sep=electrode_wg_sep
 )
 
+#######################################################
 ### ADDING TEST STRUCTURES
 devices = []
 
-### Adding Delay-Lines test structures
+### ADDING DELAY_LINES TEST STRUCTURES
 init_spirals_pos = np.array((405, 980))
 
 scan_list = np.linspace(4, 36, 5)
@@ -134,8 +137,7 @@ for x, num in enumerate(scan_list):
     this_box = (this_dev.get_box())[0].get_shapely_object()
     temp_pos = np.array((max(this_box.exterior.coords.xy[0]), init_spirals_pos[1]))
 
-
-### Adding directional couplers test structures
+### ADDING DIRECTIONAL COUPLERS TEST STRUCTURES
 
 def FSR_to_L(FSR_GHz, n_g=2.1):
     # CHECK THAT THE REFRACTIVE INDEX IS CORRECT!!!!
@@ -177,57 +179,129 @@ for row, length in enumerate(np.linspace(20, 35, NumTests_y)):
                                 length, dL, r_curve=35))
 
 
-### Adding grating couplers test structures
-spacingy = np.array((0, 215))
+### ADDING GRATING COUPLERS TEST STRUCTURES
+spacingy = np.array((0, 100))
 
 #left side - bottom
-OriginTests = np.array((-280, 1870))
+OriginTests = np.array((-280, 1760))
 col = 0
 ff = 0.25
-NumTests_y = 5
+NumTests_y = 11
 for row, period in enumerate(np.linspace(0.4, 0.52, NumTests_y)):
     devices.append(
         Efficiency_Grating(OriginTests + row * spacingy, id_to_alphanumeric(row, col+1), period, ff)
         )
 
 #left side - top
-OriginTests = np.array((-280, 3120))
+OriginTests = np.array((-280, 3070))
 col = 1
 ff = 0.3
-NumTests_y = 6
+NumTests_y = 12
 for row, period in enumerate(np.linspace(0.4, 0.52, NumTests_y)):
     devices.append(
         Efficiency_Grating(OriginTests + row * spacingy, id_to_alphanumeric(row, col+1), period, ff)
         )
 
 #central side - left
-OriginTests = np.array((1555, 150))
-col = 2
-ff = 0.2
-NumTests_y = 4
-for row, period in enumerate(np.linspace(0.4, 0.52, NumTests_y)):
-    devices.append(
-        Efficiency_Grating(OriginTests + row * spacingy, id_to_alphanumeric(row, col+1), period, ff)
-        )
+# OriginTests = np.array((1555, 150))
+# col = 2
+# ff = 0.2
+# NumTests_y = 4
+# for row, period in enumerate(np.linspace(0.4, 0.52, NumTests_y)):
+#     devices.append(
+#         Efficiency_Grating(OriginTests + row * spacingy, id_to_alphanumeric(row, col+1), period, ff)
+#         )
 
 #central side - right
-OriginTests = np.array((1757, 150))
+OriginTests = np.array((1757, 60))
 col = 3
 ff = 0.4
-NumTests_y = 4
+NumTests_y = 9
 for row, period in enumerate(np.linspace(0.4, 0.52, NumTests_y)):
     devices.append(
         Efficiency_Grating(OriginTests + row * spacingy, id_to_alphanumeric(row, col+1), period, ff)
         )
 
 #right side
-OriginTests = np.array((2220, 3350))
+OriginTests = np.array((2220, 3280))
 col = 4
 ff = 0.35
-NumTests_y = 5
+NumTests_y = 12
 for row, period in enumerate(np.linspace(0.4, 0.52, NumTests_y)):
     devices.append(
         Efficiency_Grating(OriginTests + row * spacingy, id_to_alphanumeric(row, col+1), period, ff)
+        )
+
+
+
+### ADDING RING RESONATORS - RIGHT 4X4 SPACES
+
+
+#left side - centre
+spacingy = np.array((0, 160))
+OriginTests = np.array((first_x_middle_2-300, 1850))  # (3200, 1850) for probe pitch 150
+col = 0
+ring_r = 30
+NumTests_y = 7
+for row, gap in enumerate(np.linspace(0.2, 0.8, NumTests_y)):
+    devices.append(
+        Ring_Test(OriginTests + row * spacingy, id_to_alphanumeric(row, col), gap, ring_r)
+        )
+
+#left side - top
+spacingy = np.array((0, 182))
+OriginTests = np.array((first_x_middle_2-300, 3200))  # (3200, 3200) for probe pitch 150
+col = 0
+ring_r = 40
+NumTests_y = 7
+for row, gap in enumerate(np.linspace(0.2, 0.8, NumTests_y)):
+    devices.append(
+        Ring_Test(OriginTests + row * spacingy, id_to_alphanumeric(row, col), gap, ring_r)
+        )
+
+#central side
+spacingy = np.array((0, 202))
+OriginTests = np.array((first_x_middle_2+1770, 180))  # (5220, 180) for probe pitch 150
+col = 0
+ring_r = 50
+NumTests_y = 7
+for row, gap in enumerate(np.linspace(0.2, 0.8, NumTests_y)):
+    devices.append(
+        Ring_Test(OriginTests + row * spacingy, id_to_alphanumeric(row, col), gap, ring_r)
+        )
+
+
+#right side - centre left
+spacingy = np.array((0, 222))
+OriginTests = np.array((first_x_middle_2+2200, 1950))  # (5700, 1950) for probe pitch 150
+col = 0
+ring_r = 60
+NumTests_y = 6
+for row, gap in enumerate(np.linspace(0.2, 0.8, NumTests_y)):
+    devices.append(
+        Ring_Test(OriginTests + row * spacingy, id_to_alphanumeric(row, col), gap, ring_r)
+        )
+
+#right side - centre right
+spacingy = np.array((0, 242))
+OriginTests = np.array((first_x_middle_2-2420, 1960))  # (5920, 1960) for probe pitch 150
+col = 0
+ring_r = 70
+NumTests_y = 5
+for row, gap in enumerate(np.linspace(0.2, 0.8, NumTests_y)):
+    devices.append(
+        Ring_Test(OriginTests + row * spacingy, id_to_alphanumeric(row, col), gap, ring_r)
+        )
+
+#right side - top
+spacingy = np.array((0, 262))
+OriginTests = np.array((first_x_middle_2+2200, 3450))  # (5700, 3450) for probe pitch 150
+col = 0
+ring_r = 80
+NumTests_y = 4
+for row, gap in enumerate(np.linspace(0.2, 0.8, NumTests_y)):
+    devices.append(
+        Ring_Test(OriginTests + row * spacingy, id_to_alphanumeric(row, col), gap, ring_r)
         )
 
 

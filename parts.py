@@ -138,8 +138,8 @@ def wgs_to_fiber_array(
                         wg.get_shapely_outline().bounds
                     )
                 )
-                if alignment_test:
-                    first_line_bounds[2] -= 2*127
+                #if alignment_test:
+                first_line_bounds[2] -= 2*127
                 first_line_bounds[0] -= 10
                 first_line_bounds[1] -= 10
                 _ = wf_line_from_bounds(
@@ -174,7 +174,7 @@ def wgs_to_fiber_array(
                 cell=cell,
                 wf_bounds=second_line_bounds,
                 device_top_bound=(
-                    wgs[0].current_port.origin[1]+50
+                    wgs[0].current_port.origin[1]+70
                 ),
                 marker_dims=20,
                 marker_layer_1=3,
@@ -193,8 +193,8 @@ def wgs_to_fiber_array(
                 ))
                 first_line_bounds[1] -= 10
                 first_line_bounds[2] += 10
-                if alignment_test:
-                    first_line_bounds[0] += 2*127
+                #if alignment_test:
+                first_line_bounds[0] += 1.5*127
                 _ = wf_line_from_bounds(
                     cell=cell,
                     bounds=first_line_bounds,
@@ -218,7 +218,7 @@ def wgs_to_fiber_array(
             if idx == 3:
                 second_line_bounds = [
                     (wg.current_port.origin[0]
-                     - 127/2 + 10),
+                     - 127/2+10),
                     first_line_bounds[1],
                     first_line_bounds[0],
                     first_line_bounds[1] + 1040
@@ -230,7 +230,7 @@ def wgs_to_fiber_array(
                 coupler_positions[-1][1]
             ],
             [
-                coupler_positions[-1][0] - 2*127,
+                coupler_positions[-1][0] - 2*127,  # +8*127
                 coupler_positions[-1][1]
             ]
         ]
@@ -243,15 +243,15 @@ def wgs_to_fiber_array(
         test_wg = Waveguide.make_at_port(test_gc_0.port)
         test_wg._current_port.angle = -np.pi/2
         # Would like to go around the top, but there's not enough space
-#         test_wg.add_bend(np.pi, min_radius)
-#         test_wg.add_straight_segment(100)
-#         test_wg.add_bend(np.pi/2, min_radius)
-#         test_wg.add_straight_segment_until_x(
-#             test_coupler_positions[1][0] - min_radius
-#         )
-#         test_wg.add_bend(np.pi/2, min_radius)
-#         test_wg.add_straight_segment(100)
-#         test_wg.add_bend(np.pi, min_radius)
+        # test_wg.add_bend(-np.pi, min_radius)
+        # test_wg.add_straight_segment(50)
+        # test_wg.add_bend(-np.pi/2, min_radius)
+        # test_wg.add_straight_segment_until_x(
+        #     test_coupler_positions[1][0] + min_radius
+        # )
+        # test_wg.add_bend(-np.pi/2, min_radius)
+        # test_wg.add_straight_segment(50)
+        # test_wg.add_bend(-np.pi, min_radius)
         test_wg.add_bend(-np.pi/2, min_radius)
         test_wg.add_straight_segment_until_x(
             test_coupler_positions[1][0] + min_radius
