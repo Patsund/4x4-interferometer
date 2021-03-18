@@ -105,6 +105,7 @@ def wgs_to_fiber_array(
     cell,
     ports,
     coupler_positions,
+    region_marker,
     min_radius,
     wg_sep,
     wg_layer,
@@ -142,9 +143,10 @@ def wgs_to_fiber_array(
                 first_line_bounds[2] -= 2*127
                 first_line_bounds[0] -= 10
                 first_line_bounds[1] -= 10
-                _ = wf_line_from_bounds(
+                _, region_marker = wf_line_from_bounds(
                     cell=cell,
                     bounds=first_line_bounds,
+                    region_marker=region_marker,
                     wf_maxlength=1040,
                     wf_layer=wf_layer,
                     axis=0,
@@ -195,9 +197,10 @@ def wgs_to_fiber_array(
                 first_line_bounds[2] += 10
                 #if alignment_test:
                 first_line_bounds[0] += 1.5*127
-                _ = wf_line_from_bounds(
+                _, region_marker = wf_line_from_bounds(
                     cell=cell,
                     bounds=first_line_bounds,
+                    region_marker=region_marker,
                     wf_maxlength=1040,
                     wf_layer=wf_layer,
                     axis=0,
@@ -262,9 +265,10 @@ def wgs_to_fiber_array(
         )
         cell.add_to_layer(wg_layer, test_wg, test_gc_0, test_gc_1)
 
-    _ = wf_line_from_bounds(
+    _, region_marker = wf_line_from_bounds(
         cell=cell,
         bounds=second_line_bounds,
+        region_marker=region_marker,
         wf_maxlength=1040,
         wf_layer=wf_layer,
         axis=1,
@@ -272,7 +276,7 @@ def wgs_to_fiber_array(
     )
 
     total_bounds = update_bounds(first_line_bounds, second_line_bounds)
-    return total_bounds
+    return total_bounds, region_marker
 
 
 def expand_wgs_section_1(wgs, parameters):
@@ -358,6 +362,7 @@ def build_kinks(cell,
                 signal_wg,
                 right_wg,
                 kink,
+                region_marker,
                 electrode_layer,
                 electrode_wf_layer,
                 previous_line_bounds,
@@ -442,9 +447,10 @@ def build_kinks(cell,
     right_wg._current_port.origin[0] = (right_wg._current_port.origin[0]
                                         - np.cos(initial_angle)
                                         * right_wg.current_port.width/2)
-    _ = wf_line_from_bounds(
+    _, region_marker = wf_line_from_bounds(
         cell=cell,
         bounds=kink_1_line_bounds,
+        region_marker=region_marker,
         wf_maxlength=parameters['wf_maxlength'],
         wf_layer=electrode_wf_layer,
         axis=0,
@@ -460,9 +466,10 @@ def build_kinks(cell,
              - left_wg.current_port.width/2
              - parameters['wf_leeways'][1]/2)
         ]
-        _ = wf_line_from_bounds(
+        _, region_marker = wf_line_from_bounds(
             cell=cell,
             bounds=kink_2_line_bounds,
+            region_marker=region_marker,
             wf_maxlength=parameters['wf_maxlength'],
             wf_layer=electrode_wf_layer
         )
@@ -483,9 +490,10 @@ def build_kinks(cell,
              - right_wg.current_port.width/2
              - parameters['wf_leeways'][1]/2)
         ]
-        _ = wf_line_from_bounds(
+        _, region_marker = wf_line_from_bounds(
             cell=cell,
             bounds=kink_2_line_bounds,
+            region_marker=region_marker,
             wf_maxlength=parameters['wf_maxlength'],
             wf_layer=electrode_wf_layer
         )
@@ -495,7 +503,7 @@ def build_kinks(cell,
         next_kink = [kink[0] + 3 * parameters['electrode_pitch'],
                      right_wg.current_port.origin[1]
                      - 2 * parameters['electrode_pitch']]
-    return kink_2_line_bounds, next_kink
+    return kink_2_line_bounds, next_kink, region_marker
 
 
 def build_wrap_kinks(
@@ -504,6 +512,7 @@ def build_wrap_kinks(
     signal_wg,
     right_wg,
     kink,
+    region_marker,
     wg_top,
     electrode_layer,
     electrode_wf_layer,
@@ -598,9 +607,10 @@ def build_wrap_kinks(
     right_wg._current_port.origin[0] = (right_wg._current_port.origin[0]
                                         + np.cos(initial_angle)
                                         * right_wg.current_port.width/2)
-    _ = wf_line_from_bounds(
+    _, region_marker = wf_line_from_bounds(
         cell=cell,
         bounds=kink_1_line_bounds,
+        region_marker=region_marker,
         wf_maxlength=parameters['wf_maxlength'],
         wf_layer=electrode_wf_layer,
         axis=0,
@@ -618,9 +628,10 @@ def build_wrap_kinks(
              - left_wg.current_port.width/2
              - parameters['wf_leeways'][1]/2)
         ]
-        _ = wf_line_from_bounds(
+        _, region_marker = wf_line_from_bounds(
             cell=cell,
             bounds=kink_2_line_bounds,
+            region_marker=region_marker,
             wf_maxlength=parameters['wf_maxlength'],
             wf_layer=electrode_wf_layer
         )
@@ -641,9 +652,10 @@ def build_wrap_kinks(
              - right_wg.current_port.width/2
              - parameters['wf_leeways'][1]/2)
         ]
-        _ = wf_line_from_bounds(
+        _, region_marker = wf_line_from_bounds(
             cell=cell,
             bounds=kink_2_line_bounds,
+            region_marker=region_marker,
             wf_maxlength=parameters['wf_maxlength'],
             wf_layer=electrode_wf_layer
         )
@@ -653,7 +665,7 @@ def build_wrap_kinks(
         next_kink = [kink[0] - 3 * parameters['electrode_pitch'],
                      left_wg.current_port.origin[1]
                      + 2 * parameters['electrode_pitch']]
-    return kink_2_line_bounds, next_kink
+    return kink_2_line_bounds, next_kink, region_marker
 
 
 def electrode_connector(cell,
@@ -671,6 +683,7 @@ def electrode_connector(cell,
                         probe_connector=True):
     # Collect electrodes to save space
     next_kink = [-1, -1]
+    region_marker = bounds_to_polygon(previous_line_bounds)
     if kink != [-1, -1]:
         if (left_side
             and not (
@@ -688,12 +701,13 @@ def electrode_connector(cell,
                 kink[0] = (connector_coordinates[0]
                            - parameters['connector_probe_pitch']
                            - signal_wg.current_port.width)
-            previous_line_bounds, next_kink = build_wrap_kinks(
+            previous_line_bounds, next_kink, region_marker = build_wrap_kinks(
                 cell,
                 left_wg,
                 signal_wg,
                 right_wg,
                 kink,
+                region_marker,
                 wg_top,
                 electrode_layer,
                 electrode_wf_layer,
@@ -715,12 +729,13 @@ def electrode_connector(cell,
                 kink[0] = (connector_coordinates[0]
                            + parameters['connector_probe_pitch']
                            + signal_wg.current_port.width)
-            previous_line_bounds, next_kink = build_wrap_kinks(
+            previous_line_bounds, next_kink, region_marker = build_wrap_kinks(
                 cell,
                 left_wg,
                 signal_wg,
                 right_wg,
                 kink,
+                region_marker,
                 wg_top,
                 electrode_layer,
                 electrode_wf_layer,
@@ -730,12 +745,13 @@ def electrode_connector(cell,
             )
             left_side = True
         else:
-            previous_line_bounds, next_kink = build_kinks(
+            previous_line_bounds, next_kink, region_marker = build_kinks(
                 cell,
                 left_wg,
                 signal_wg,
                 right_wg,
                 kink,
+                region_marker,
                 electrode_layer,
                 electrode_wf_layer,
                 previous_line_bounds,
@@ -747,12 +763,13 @@ def electrode_connector(cell,
             left_side
             and connector_coordinates[0] > signal_wg.current_port.origin[0]
         ):
-            previous_line_bounds, next_kink = build_wrap_kinks(
+            previous_line_bounds, next_kink, region_marker = build_wrap_kinks(
                 cell,
                 left_wg,
                 signal_wg,
                 right_wg,
                 kink,
+                region_marker,
                 wg_top,
                 electrode_layer,
                 electrode_wf_layer,
@@ -765,12 +782,13 @@ def electrode_connector(cell,
             not left_side
             and connector_coordinates[0] < signal_wg.current_port.origin[0]
         ):
-            previous_line_bounds, next_kink = build_wrap_kinks(
+            previous_line_bounds, next_kink, region_marker = build_wrap_kinks(
                 cell,
                 left_wg,
                 signal_wg,
                 right_wg,
                 kink,
+                region_marker,
                 wg_top,
                 electrode_layer,
                 electrode_wf_layer,
@@ -779,7 +797,10 @@ def electrode_connector(cell,
                 parameters
             )
             left_side = True
-
+    # region_marker = geometric_union([
+    #     region_marker,
+    #     bounds_to_polygon(previous_line_bounds)
+    # ])
     if left_side:
         first_line_bounds = [-1,
                              (left_wg.current_port.origin[1]
@@ -826,9 +847,10 @@ def electrode_connector(cell,
            ):
             first_line_bounds[2] = first_line_bounds[0]
         else:
-            _ = wf_line_from_bounds(
+            _, region_marker = wf_line_from_bounds(
                     cell=cell,
                     bounds=first_line_bounds,
+                    region_marker=region_marker,
                     wf_maxlength=parameters['wf_maxlength'],
                     wf_layer=electrode_wf_layer,
                     axis=0,
@@ -869,14 +891,19 @@ def electrode_connector(cell,
            ):
             first_line_bounds[0] = first_line_bounds[2]
         else:
-            _ = wf_line_from_bounds(
+            _, region_marker = wf_line_from_bounds(
                     cell=cell,
                     bounds=first_line_bounds,
+                    region_marker=region_marker,
                     wf_maxlength=parameters['wf_maxlength'],
                     wf_layer=electrode_wf_layer,
                     axis=0,
                     direction=wf_direction
                 )
+    # region_marker = geometric_union([
+    #     region_marker,
+    #     bounds_to_polygon(first_line_bounds)
+    # ])
     # 90 degree turn
     right_wg._current_port.origin[1] = (right_wg._current_port.origin[1]
                                         - right_wg.current_port.width/2.0)
@@ -900,6 +927,7 @@ def electrode_connector(cell,
             left_wg,
             signal_wg,
             right_wg,
+            region_marker,
             electrode_layer,
             electrode_wf_layer,
             connector_coordinates,
@@ -914,6 +942,7 @@ def electrode_connector(cell,
             left_wg,
             signal_wg,
             right_wg,
+            region_marker,
             electrode_layer,
             electrode_wf_layer,
             connector_coordinates,
@@ -928,6 +957,7 @@ def electrode_probe_and_pad(cell,
                             left_wg,
                             signal_wg,
                             right_wg,
+                            region_marker,
                             electrode_layer,
                             electrode_wf_layer,
                             connector_coordinates,
@@ -987,12 +1017,13 @@ def electrode_probe_and_pad(cell,
                                      - left_wg.current_port.width/2
                                      - parameters['wf_leeways'][0]/2)
 
-    _ = wf_line_from_bounds(
+    _, region_marker = wf_line_from_bounds(
                 cell=cell,
                 bounds=second_line_bounds,
+                region_marker=region_marker,
                 wf_maxlength=parameters['wf_maxlength'],
                 wf_layer=electrode_wf_layer
-            )
+    )
     first_pad_wf_bounds = [-1,
                            second_line_bounds[3],
                            -1,
@@ -1091,21 +1122,32 @@ def electrode_probe_and_pad(cell,
     right_wg.add_straight_segment_until_y(signal_wg.current_port.origin[1]
                                           + parameters['contact_pad_sep']
                                           + right_wg.current_port.width/2)
-    _ = wf_line_from_bounds(
+    _, region_marker = wf_line_from_bounds(
                 cell=cell,
                 bounds=first_pad_wf_bounds,
+                region_marker=region_marker,
                 wf_maxlength=parameters['wf_maxlength'],
                 wf_layer=electrode_wf_layer
             )
+    # region_marker = geometric_union([
+    #     region_marker,
+    #     bounds_to_polygon(first_pad_wf_bounds)
+    # ])
+
     second_pad_wf_bounds[1] = first_pad_wf_bounds[3]
     second_pad_wf_bounds[3] = (first_pad_wf_bounds[3]
                                + 650)
-    _ = wf_line_from_bounds(
+    _, region_marker = wf_line_from_bounds(
                 cell=cell,
                 bounds=second_pad_wf_bounds,
+                region_marker=region_marker,
                 wf_maxlength=parameters['wf_maxlength'],
                 wf_layer=electrode_wf_layer
             )
+    # region_marker = geometric_union([
+    #     region_marker,
+    #     bounds_to_polygon(second_pad_wf_bounds)
+    # ])
     # add markers
     top_bound = left_wg.get_shapely_outline().bounds[3]
     add_markers_to_top_compact(
@@ -1117,12 +1159,15 @@ def electrode_probe_and_pad(cell,
         marker_layer_2=parameters['mk_layer_2'],
         marker_protection_layer=parameters['mk_layer_3']
     )
+    cell.add_to_layer(parameters['electrode_region_layer'],
+                      region_marker)
 
 
 def electrode_pad(cell,
                   left_wg,
                   signal_wg,
                   right_wg,
+                  region_marker,
                   electrode_layer,
                   electrode_wf_layer,
                   connector_coordinates,
@@ -1168,12 +1213,17 @@ def electrode_pad(cell,
                                      - left_wg.current_port.width/2
                                      - parameters['wf_leeways'][0]/2)
 
-    _ = wf_line_from_bounds(
+    _, region_marker = wf_line_from_bounds(
                 cell=cell,
                 bounds=second_line_bounds,
+                region_marker=region_marker,
                 wf_maxlength=parameters['wf_maxlength'],
                 wf_layer=electrode_wf_layer
             )
+    # region_marker = geometric_union([
+    #     region_marker,
+    #     bounds_to_polygon(second_line_bounds)
+    # ])
     first_pad_wf_bounds = [-1,
                            second_line_bounds[3],
                            -1,
@@ -1229,21 +1279,31 @@ def electrode_pad(cell,
     right_wg.add_straight_segment_until_y(signal_wg.current_port.origin[1]
                                           + parameters['contact_pad_sep']
                                           + right_wg.current_port.width/2)
-    _ = wf_line_from_bounds(
+    _, region_marker = wf_line_from_bounds(
                 cell=cell,
                 bounds=first_pad_wf_bounds,
+                region_marker=region_marker,
                 wf_maxlength=parameters['wf_maxlength'],
                 wf_layer=electrode_wf_layer
             )
+    # region_marker = geometric_union([
+    #     region_marker,
+    #     bounds_to_polygon(first_pad_wf_bounds)
+    # ])
     second_pad_wf_bounds[1] = first_pad_wf_bounds[3]
     second_pad_wf_bounds[3] = (first_pad_wf_bounds[3]
                                + 650)
-    _ = wf_line_from_bounds(
+    _, region_marker = wf_line_from_bounds(
                 cell=cell,
                 bounds=second_pad_wf_bounds,
+                region_marker=region_marker,
                 wf_maxlength=parameters['wf_maxlength'],
                 wf_layer=electrode_wf_layer
             )
+    # region_marker = geometric_union([
+    #     region_marker,
+    #     bounds_to_polygon(second_pad_wf_bounds)
+    # ])
     # add markers
     top_bound = left_wg.get_shapely_outline().bounds[3]
     add_markers_to_top(cell=cell,
@@ -1253,6 +1313,8 @@ def electrode_pad(cell,
                        marker_layer_1=parameters['mk_layer_1'],
                        marker_layer_2=parameters['mk_layer_2'],
                        marker_protection_layer=parameters['mk_layer_3'])
+    cell.add_to_layer(parameters['electrode_region_layer'],
+                      region_marker)
 
 
 def phase_shifter_and_dc_wg(
@@ -1494,7 +1556,7 @@ def phase_shifter_electrodes(
                       wf_line_bounds[1] - extra_width,
                       wf_line_bounds[2],
                       wf_line_bounds[3] + extra_width)
-    _ = wf_line_from_bounds(
+    _, _ = wf_line_from_bounds(
         cell=cell,
         bounds=wf_line_bounds,
         wf_maxlength=parameters['wf_maxlength'],
@@ -1718,6 +1780,7 @@ def build_interferometer(
         'wf_leeways': (10, 10),
         'wf_x_sep': 10,
         'wf_electrode_leeways': (10, 10),
+        'electrode_region_layer': 103,
         # For markers
         'marker_dims': 20,
         'mk_layer_1': 3,
@@ -1942,12 +2005,13 @@ def build_interferometer(
                       x_extrema[1]
                       + parameters['wf_leeways'][0],
                       wgs[0].current_port.origin[1])
-    line_bounds = wf_line_from_bounds(
+    line_bounds, _ = wf_line_from_bounds(
         cell=cell,
         bounds=wf_line_bounds,
         wf_maxlength=parameters['wf_maxlength'],
         wf_layer=wf_layer
     )
+    region_marker = bounds_to_polygon(wf_line_bounds)
     wg_wf_bounds = update_bounds(wg_wf_bounds, line_bounds)
     wf_line_bounds = [wf_line_bounds[0],
                       wf_line_bounds[3],
@@ -1955,9 +2019,10 @@ def build_interferometer(
                        + parameters['wf_leeways'][0]),
                       (wgs[0].get_shapely_outline().bounds[3]
                        + parameters['wf_leeways'][1])]
-    top_line_bounds = wf_line_from_bounds(
+    top_line_bounds, region_marker = wf_line_from_bounds(
         cell=cell,
         bounds=wf_line_bounds,
+        region_marker=region_marker,
         wf_maxlength=(wf_line_bounds[2] - wf_line_bounds[0])/3,
         wf_layer=wf_layer,
         axis=0
@@ -2019,9 +2084,10 @@ def build_interferometer(
                       x_extrema[1]
                       + parameters['wf_leeways'][0],
                       top_line_bounds[1])
-    line_bounds = wf_line_from_bounds(
+    line_bounds, region_marker = wf_line_from_bounds(
         cell=cell,
         bounds=wf_line_bounds,
+        region_marker=region_marker,
         wf_maxlength=parameters['wf_maxlength'],
         wf_layer=wf_layer
     )
@@ -2098,7 +2164,7 @@ def build_interferometer(
                 left_side=False,
                 parameters=parameters
             )
-    return wgs, wg_wf_bounds
+    return wgs, wg_wf_bounds, region_marker
 
 
 def build_interferometer_no_delay(
@@ -2148,6 +2214,7 @@ def build_interferometer_no_delay(
         'wf_leeways': (10, 10),
         'wf_x_sep': 10,
         'wf_electrode_leeways': (10, 10),
+        'electrode_region_layer': 103,
         # For markers
         'marker_dims': 20,
         'mk_layer_1': 3,
@@ -2297,12 +2364,13 @@ def build_interferometer_no_delay(
                       x_extrema[1]
                       + parameters['wf_leeways'][0],
                       wgs[0].current_port.origin[1])
-    line_bounds = wf_line_from_bounds(
+    line_bounds, _ = wf_line_from_bounds(
         cell=cell,
         bounds=wf_line_bounds,
         wf_maxlength=parameters['wf_maxlength'],
         wf_layer=wf_layer
     )
+    region_marker = bounds_to_polygon(wf_line_bounds)
     wg_wf_bounds = update_bounds(wg_wf_bounds, line_bounds)
     wf_line_bounds = [wf_line_bounds[0],
                       wf_line_bounds[3],
@@ -2310,9 +2378,10 @@ def build_interferometer_no_delay(
                        + parameters['wf_leeways'][0]),
                       (wgs[0].get_shapely_outline().bounds[3]
                        + parameters['wf_leeways'][1])]
-    top_line_bounds = wf_line_from_bounds(
+    top_line_bounds, region_marker = wf_line_from_bounds(
         cell=cell,
         bounds=wf_line_bounds,
+        region_marker=region_marker,
         wf_maxlength=(wf_line_bounds[2] - wf_line_bounds[0])/3,
         wf_layer=wf_layer,
         axis=0
@@ -2378,9 +2447,10 @@ def build_interferometer_no_delay(
                       x_extrema[1]
                       + parameters['wf_leeways'][0],
                       top_line_bounds[1])
-    line_bounds = wf_line_from_bounds(
+    line_bounds, region_marker = wf_line_from_bounds(
         cell=cell,
         bounds=wf_line_bounds,
+        region_marker=region_marker,
         wf_maxlength=parameters['wf_maxlength'],
         wf_layer=wf_layer
     )
@@ -2457,7 +2527,7 @@ def build_interferometer_no_delay(
                 left_side=False,
                 parameters=parameters
             )
-    return wgs, wg_wf_bounds
+    return wgs, wg_wf_bounds, region_marker
 
 
 def interferometer_and_fiber_array(
@@ -2511,6 +2581,7 @@ def interferometer_and_fiber_array(
         'wf_leeways': (10, 10),
         'wf_x_sep': 10,
         'wf_electrode_leeways': (10, 10),
+        'wg_region_layer': 101,
         # For markers
         'marker_dims': 20,
         'mk_layer_1': 3,
@@ -2520,7 +2591,7 @@ def interferometer_and_fiber_array(
     fix_dict(parameters, kwargs)
     wgs = [Waveguide.make_at_port(inport) for inport in inports]
     if delay_lines:
-        wgs, total_bounds = build_interferometer(
+        wgs, total_bounds, region_marker = build_interferometer(
             cell,
             wgs,
             electrode_length,
@@ -2537,7 +2608,7 @@ def interferometer_and_fiber_array(
             **parameters
         )
     else:
-        wgs, total_bounds = build_interferometer_no_delay(
+        wgs, total_bounds, region_marker = build_interferometer_no_delay(
             cell,
             wgs,
             electrode_length,
@@ -2555,10 +2626,11 @@ def interferometer_and_fiber_array(
         )
     outports = [wg.current_port for wg in wgs]
 
-    incoupling_bounds = wgs_to_fiber_array(
+    incoupling_bounds, region_marker = wgs_to_fiber_array(
         cell=cell,
         ports=inports,
         coupler_positions=gc_positions[:4],
+        region_marker=region_marker,
         min_radius=parameters['min_radius'],
         wg_sep=parameters['wg_sep'],
         wg_layer=wg_layer,
@@ -2568,16 +2640,19 @@ def interferometer_and_fiber_array(
     )
     total_bounds = update_bounds(total_bounds, incoupling_bounds)
 
-    outcoupling_bounds = wgs_to_fiber_array(
+    outcoupling_bounds, region_marker = wgs_to_fiber_array(
         cell=cell,
         ports=outports,
         coupler_positions=gc_positions[4:],
+        region_marker=region_marker,
         min_radius=parameters['min_radius'],
         wg_sep=parameters['wg_sep'],
         wg_layer=wg_layer,
         wf_layer=wf_layer,
         is_incoupling=False
     )
+
+    cell.add_to_layer(parameters['wg_region_layer'], region_marker)
     total_bounds = update_bounds(total_bounds, outcoupling_bounds)
 
     return total_bounds

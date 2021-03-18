@@ -1,5 +1,6 @@
 import numpy as np
 from shapely.geometry import Polygon
+from gdshelpers.geometry.shapely_adapter import geometric_union
 
 def update_bounds(bounds1, bounds2):
     # (minx, miny, maxx, maxy)
@@ -50,6 +51,7 @@ def wf_line_from_bounds(cell,
                         wf_layer,
                         wf_additions={},
                         axis=1,
+                        region_marker=None,
                         direction=1):
     # assumes x direction is fine and that leeways have
     # been included in the bounds
@@ -85,4 +87,16 @@ def wf_line_from_bounds(cell,
     wf_bounds[axis+2*(1-dir_idx)] = current_position
     wf_bounds[axis+2*dir_idx] = current_limit
     single_wf_from_bounds(cell, np.add(wf_bounds, wf_addition), wf_layer)
-    return bounds
+    if region_marker is not None:
+        region_marker = geometric_union([
+            region_marker,
+            bounds_to_polygon(bounds)
+        ])
+    return bounds, region_marker
+
+
+def bounds_to_polygon(bounds):
+    # (minx, maxy), (maxx, maxy), (maxx, miny), (minx, miny)
+    corners = [(bounds[0], bounds[3]), (bounds[2], bounds[3]), 
+               (bounds[2], bounds[1]), (bounds[0], bounds[1])]
+    return Polygon(corners)
