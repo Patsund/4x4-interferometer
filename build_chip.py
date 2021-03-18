@@ -107,6 +107,7 @@ _ = interferometer_and_fiber_array(
     electrode_wf_layer=102,
     electrode_contact_pad_coordinates=[],
     second_x_middle=second_x_middle_2,
+    delay_lines=False,
     total_bounds=(np.inf, np.inf, -np.inf, -np.inf),
     mm_wg_width=1,
     mm_taper_length=30,
