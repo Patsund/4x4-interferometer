@@ -200,7 +200,7 @@ def EulerSBend_Points(start_point=(0.0, 0.0),
     # Second bend
     points = np.concatenate(
         (
-            points, EulerBendPoints_Relative(points[-1] + np.array((0, extra_y)), radius, angle, -angle,
+            points[:-2], EulerBendPoints_Relative(points[-1] + np.array((0, extra_y)), radius, angle, -angle,
                                              (not in_clockwise), resolution)))
 
     # Check
@@ -480,20 +480,51 @@ def wgAdd_EulerBend(wg,
                     add_space=0.01):
     """add an Euler bend to a gdshelpers waveguide."""
     bend_pts_temp = EulerBendPoints_Relative(start_point=(0, 0),
-                                        radius=radius,
-                                        input_angle=0.0,
-                                        angle_amount=angle,
-                                        clockwise=clockwise,
-                                        resolution=resolution)
+                                             radius=radius,
+                                             input_angle=0.0,
+                                             angle_amount=angle,
+                                             clockwise=clockwise,
+                                             resolution=resolution)
 
     ## SP 06/03/2021: fixing bug to impose the correct output angle
     bend_pts = [bend_pts_temp[0], bend_pts_temp[0] + (add_space, 0)]
     bend_pts = bend_pts + bend_pts_temp[1:-2]
     bend_pts = bend_pts + [bend_pts_temp[-1] - rotate((add_space, 0), angle, (0, 0)), bend_pts_temp[-1]]
 
-    bend_pts = [tuple(pt)for pt in bend_pts]
+    bend_pts = [tuple(pt) for pt in bend_pts]
     wg.add_parameterized_path(bend_pts)
 
+
+def wgAdd_EulerSBend(wg,
+                     offset=5.0,
+                     radius=10.0,
+                     resolution=200,
+                     add_space=0.01):
+    """add an Euler bend to a gdshelpers waveguide."""
+    bend_pts_temp = EulerSBend_Points(start_point=(0, 0),
+                                      offset=offset,
+                                      radius=radius,
+                                      input_angle=0.0,
+                                      resolution=resolution)
+
+    ## SP 06/03/2021: fixing bug to impose the correct output angle
+    bend_pts = [bend_pts_temp[0], np.array(bend_pts_temp[0]) + (add_space, 0)]
+    bend_pts = bend_pts + bend_pts_temp[1:]
+    bend_pts = bend_pts + [np.array(bend_pts_temp[-1]) + (add_space, 0)]
+    bend_pts = [tuple(pt) for pt in bend_pts]
+    wg.add_parameterized_path(bend_pts)
+
+
+
+
+    # wg.add_parameterized_path(bend_pts)
+
+
+EulerSBend_Points(start_point=(0.0, 0.0),
+                  offset=5.0,
+                  radius=10.0,
+                  input_angle=0.0,
+                  resolution=200.)
 
 if __name__ == "__main__":
     import matplotlib.pyplot as plt
