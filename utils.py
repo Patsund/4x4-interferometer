@@ -1,6 +1,7 @@
 import numpy as np
 from shapely.geometry import Polygon
 from gdshelpers.geometry.shapely_adapter import geometric_union
+from gdshelpers.parts.marker import DLWMarker, SquareMarker, CrossMarker
 
 def update_bounds(bounds1, bounds2):
     # (minx, miny, maxx, maxy)
@@ -21,7 +22,6 @@ def fix_dict(parameters, kwargs):
         else:
             if parameters['kwarg_verbose']:
                 print(key, 'is not a parameter for this function')
- 
 
 
 def single_wf_from_bounds(cell, wf_bounds, wf_layer):
@@ -100,3 +100,99 @@ def bounds_to_polygon(bounds):
     corners = [(bounds[0], bounds[3]), (bounds[2], bounds[3]), 
                (bounds[2], bounds[1]), (bounds[0], bounds[1])]
     return Polygon(corners)
+
+
+def add_markers_to_top(cell,
+                       wf_bounds,
+                       device_top_bound,
+                       marker_dims,
+                       wg_layer,
+                       marker_layer_1,
+                       marker_layer_2,
+                       marker_protection_layer):
+    marker_positions_1 = [(wf_bounds[0] + 1.5*marker_dims,
+                           wf_bounds[3] - 1.5*marker_dims-100),
+                          (wf_bounds[2] - 1.5*marker_dims,
+                           wf_bounds[3] - 1.5*marker_dims-100),
+                          (wf_bounds[2] - 1.5*marker_dims,
+                           device_top_bound + 80
+                           + 3*marker_dims)]
+    marker_positions_2 = [(marker_positions_1[0][0] + 120,
+                           marker_positions_1[0][1]),
+                          (marker_positions_1[1][0] - 120,
+                           marker_positions_1[1][1]),
+                          (marker_positions_1[2][0] - 120,
+                           marker_positions_1[2][1])]
+    markers_1 = [SquareMarker.make_marker(position, marker_dims)
+                 for position in marker_positions_1]
+    markers_1_wg = [SquareMarker.make_marker(position, 1.5*marker_dims)
+                    for position in marker_positions_1]
+    markers_1_protection = [SquareMarker.make_marker(position, 2*marker_dims)
+                            for position in marker_positions_1]
+    markers_2 = [SquareMarker.make_marker(position, marker_dims)
+                 for position in marker_positions_2]
+    markers_2_wg = [SquareMarker.make_marker(position, 1.5*marker_dims)
+                    for position in marker_positions_2]
+    markers_2_protection = [SquareMarker.make_marker(position, 2*marker_dims)
+                            for position in marker_positions_2]
+    for idx in range(len(markers_1)):
+        cell.add_to_layer(marker_layer_1, markers_1[idx])
+        cell.add_to_layer(wg_layer, markers_1_wg[idx])
+        cell.add_to_layer(marker_protection_layer,
+                          markers_1_protection[idx])
+        cell.add_to_layer(marker_layer_2, markers_2[idx])
+        cell.add_to_layer(wg_layer, markers_2_wg[idx])
+        cell.add_to_layer(marker_protection_layer,
+                          markers_2_protection[idx])
+
+
+def connect_writefields(cell,
+                        initial_point,
+                        end_point,
+                        wf_layer,
+                        region_marker,
+                        parameters):
+    if end_point[1] < initial_point[1]:
+        new_end_point = [end_point[0],
+                         initial_point[1] + (initial_point[1]-end_point[1])]
+        end_point = new_end_point
+
+    vertical_line_bounds = [
+                            initial_point[0]-parameters['wf_leeways'][0],
+                            initial_point[1],
+                            initial_point[0]+parameters['wf_leeways'][0],
+                            end_point[1]-parameters['wf_leeways'][0]
+                           ]
+    _, region_marker = wf_line_from_bounds(
+        cell=cell,
+        bounds=vertical_line_bounds,
+        region_marker=region_marker,
+        wf_maxlength=1040,
+        wf_layer=wf_layer,
+        axis=1,
+        direction=1
+    )
+    if end_point[0] > initial_point[0]:
+        horizontal_line_bounds = [
+                                  initial_point[0]-parameters['wf_leeways'][0],
+                                  end_point[1]-parameters['wf_leeways'][0],
+                                  end_point[0],
+                                  end_point[1]+parameters['wf_leeways'][0]
+                                 ]
+    else:
+        horizontal_line_bounds = [
+                                  end_point[0],
+                                  end_point[1]-parameters['wf_leeways'][0],
+                                  initial_point[0]+parameters['wf_leeways'][0],
+                                  end_point[1]+parameters['wf_leeways'][0]
+                                 ]
+    _, region_marker = wf_line_from_bounds(
+        cell=cell,
+        bounds=horizontal_line_bounds,
+        region_marker=region_marker,
+        wf_maxlength=1040,
+        wf_layer=wf_layer,
+        axis=1,
+        direction=1
+    )
+    return region_marker
