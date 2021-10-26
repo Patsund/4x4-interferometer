@@ -6,9 +6,9 @@ from gdshelpers.parts.coupler import GratingCoupler
 from euler_curves import wgAdd_EulerWiggle
 from electrode_parts import electrode_connector, phase_shifter_electrodes
 from wg_parts import wgs_to_fiber_array, expand_wgs_section_2
-from wg_parts import phase_shifter_and_dc_wg
+from wg_parts import phase_shifter_and_dc_wg, just_dc_wg
 
-# Version 2.1
+# Version 2.2
 
 def marker_L_positions(center, dir_1, dir_2, separation=200):
     positions = [(center[0] + idx * dir_1 * separation, center[1])
@@ -236,8 +236,10 @@ def build_interferometer(
                                 + stagger_separation
                                 + param['coupler_length']
                                 + 2*param['sine_s_x']
-                                + param['mm_taper_length'])
-
+                                + param['mm_taper_length']
+                                - 150)
+    just_dc_wg(wgs[:2], param)
+    just_dc_wg(wgs[2:], param)
     for electrode_idx in range(1):
         sec1_electrodes = section_1_dcs_electrodes(
             cell=cell,
@@ -265,8 +267,24 @@ def build_interferometer(
             delay=False
         )
         left_side_electrodes[electrode_idx] = sec2_electrodes
-
-    # first and last mode delay lines
+    if param['mm_taper_length'] > 0:
+        wgs[0].add_straight_segment(param['mm_taper_length'],
+                                    param['mm_wg_width'])
+        wgs[3].add_straight_segment(param['mm_taper_length'],
+                                    param['mm_wg_width'])
+    wgs[0].add_straight_segment_until_y(
+        wgs[1].current_port.origin[1] - param['mm_taper_length']
+    )
+    wgs[3].add_straight_segment_until_y(
+        wgs[1].current_port.origin[1] - param['mm_taper_length']
+    )
+    if param['mm_taper_length'] > 0:
+        wgs[0].add_straight_segment(param['mm_taper_length'],
+                                    param['sm_wg_width'])
+        wgs[3].add_straight_segment(param['mm_taper_length'],
+                                    param['sm_wg_width'])
+    first_line_right_bound = (wgs[3].current_port.origin[0]
+                              + wgs[3].current_port.width)
     curve_goal_x_positions = [
         # leftmost to rightmost
         (second_x_middle
@@ -283,123 +301,23 @@ def build_interferometer(
          - 0.5*param['electrode_wg_sep']
          - param['wg_sep'])
     ]
-    wg_sep = 90
-    left_to_right = wgs[0]
-    if param['mm_taper_length'] > 0:
-        left_to_right.add_straight_segment(param['mm_taper_length'],
-                                           param['mm_wg_width'])
-    left_to_right.add_straight_segment_until_y(
-        wgs[1].current_port.origin[1]
-        + 3 * wg_sep
-        - 50
-        - param['mm_taper_length']
-    )
-    if param['mm_taper_length'] > 0:
-        left_to_right.add_straight_segment(param['mm_taper_length'],
-                                           param['sm_wg_width'])
-    left_to_right.add_bend(-np.pi/2, param['min_radius'])
-    if param['mm_taper_length'] > 0:
-        left_to_right.add_straight_segment(param['mm_taper_length'],
-                                           param['mm_wg_width'])
-    left_to_right.add_straight_segment_until_x(
-        curve_goal_x_positions[0]
-        - param['min_radius']
-        - param['mm_taper_length']
-    )
-    if param['mm_taper_length'] > 0:
-        left_to_right.add_straight_segment(param['mm_taper_length'],
-                                           param['sm_wg_width'])
-    left_to_right.add_bend(-np.pi/2, param['min_radius'])
-    left_to_right.add_straight_segment(3*wg_sep - 50)
-
-    longest_path_length = left_to_right.length
-    path_length = [0, 0, 0]
-    initial_crow_length = (
-        wgs[1].current_port.origin[1]
-        - wgs[3].current_port.origin[1]
-    )
-
-    for idx in range(1, 4):
-        curve_length = abs(
-            curve_goal_x_positions[idx]
-            - wgs[idx].current_port.origin[0]
-        )
-        path_length[idx-1] = (
-            wgs[idx].length
-            + np.pi * curve_length
-        )
-        if idx == 3:
-            if delay:
-                radius = param['min_radius']
-                # initial_length = wgs[3].length
-                target_path_length = (
-                    longest_path_length
-                    - wgs[3].length
-                    - np.pi * param['min_radius']
-                    - curve_goal_x_positions[3]
-                    + wgs[3].current_port.origin[0]
-                    + 2*param['min_radius']
-                )
-                target_crow_length = initial_crow_length
-                wgAdd_EulerWiggle(
-                    wgs[3],
-                    radius=radius,
-                    target_path_length=target_path_length,
-                    target_crow_length=target_crow_length,
-                    internal_angle_mod=0.0,
-                    N_turns=49,
-                    resolution=200,
-                    mirrored=True
-                )
-                first_line_right_bound = (
-                    wgs[3].get_shapely_outline().bounds[2]
-                )
-            else:
-                first_line_right_bound = (wgs[3].current_port.origin[0]
-                                          + wgs[3].current_port.width)
-                wgs[3].add_straight_segment(initial_crow_length)
-            # final_length = wgs[3].length
-            wgs[3].add_bend(-np.pi/2, param['min_radius'])
-            if param['mm_taper_length'] > 0:
-                wgs[3].add_straight_segment(param['mm_taper_length'],
-                                            param['mm_wg_width'])
-            wgs[3].add_straight_segment_until_x(
-                curve_goal_x_positions[3]
-                - param['min_radius']
-                - param['mm_taper_length']
+    for idx in range(3, -1, -1):
+        wgs[idx].add_straight_segment((3-idx) * param['wg_sep'])
+        wgs[idx].add_bend(-np.pi/2, param['min_radius'])
+        if param['mm_taper_length'] > 0:
+            wgs[idx].add_straight_segment(param['mm_taper_length'],
+                                          param['mm_wg_width'])
+        wgs[idx].add_straight_segment_until_x(curve_goal_x_positions[idx]
+                                              - param['min_radius']
+                                              - param['mm_taper_length'])
+        if param['mm_taper_length'] > 0:
+            wgs[idx].add_straight_segment(param['mm_taper_length'],
+                                          param['sm_wg_width'])                                    
+        wgs[idx].add_bend(-np.pi/2, param['min_radius'])
+        if idx != 3:
+            wgs[idx].add_straight_segment_until_y(
+                wgs[3].current_port.origin[1]
             )
-            if param['mm_taper_length'] > 0:
-                wgs[3].add_straight_segment(param['mm_taper_length'],
-                                            param['sm_wg_width'])
-            wgs[3].add_bend(-np.pi/2, param['min_radius'])
-
-        else:
-            wgs[idx].add_straight_segment((3-idx) * wg_sep - 50)
-            wgs[idx].add_bend(-np.pi/2, param['min_radius'])
-            target_path_length = (longest_path_length
-                                  - wgs[idx].length
-                                  - np.pi/2 * param['min_radius']
-                                  - (3-idx) * wg_sep
-                                  + 50)
-            target_crow_length = (curve_goal_x_positions[idx]
-                                  - wgs[idx].current_port.origin[0]
-                                  - param['min_radius'])
-            if delay:
-                radius = param['min_radius']
-                wgAdd_EulerWiggle(
-                    wgs[idx],
-                    radius=radius,
-                    target_path_length=target_path_length,
-                    target_crow_length=target_crow_length,
-                    internal_angle_mod=0.0,
-                    N_turns=11,
-                    mirrored=False,
-                    resolution=200
-                )
-            else:
-                wgs[idx].add_straight_segment(target_crow_length)
-            wgs[idx].add_bend(-np.pi/2, param['min_radius'])
-            wgs[idx].add_straight_segment((3-idx) * wg_sep - 50)
 
     x_extrema = (x_middle
                  - param['wg_sep']/2
@@ -502,6 +420,7 @@ def build_interferometer(
                 left_wg=short_wg,
                 signal_wg=signal_wg,
                 right_wg=long_wg,
+                direction=direction,
                 kink=kink,
                 wg_top=top_line_bounds[3],
                 electrode_wf_layer=param['left_electrode_wf_layers'][idx],
@@ -518,6 +437,7 @@ def build_interferometer(
                 left_wg=long_wg,
                 signal_wg=signal_wg,
                 right_wg=short_wg,
+                direction=direction,
                 kink=kink,
                 wg_top=top_line_bounds[3],
                 electrode_wf_layer=param['left_electrode_wf_layers'][idx],
@@ -539,6 +459,7 @@ def build_interferometer(
                 left_wg=long_wg,
                 signal_wg=signal_wg,
                 right_wg=short_wg,
+                direction=direction,
                 kink=kink,
                 wg_top=top_line_bounds[3],
                 electrode_wf_layer=param['right_electrode_wf_layers'][idx],
@@ -555,6 +476,7 @@ def build_interferometer(
                 left_wg=short_wg,
                 signal_wg=signal_wg,
                 right_wg=long_wg,
+                direction=direction,
                 kink=kink,
                 wg_top=top_line_bounds[3],
                 electrode_wf_layer=param['right_electrode_wf_layers'][idx],
@@ -568,188 +490,188 @@ def build_interferometer(
     return wgs, wg_wf_bounds, region_marker
 
 
-def wgs_to_fiber_array(
-    cell,
-    ports,
-    coupler_positions,
-    region_marker,
-    is_incoupling,
-    param,
-    all_wf_layers=[],
-    all_region_markers=[],
-    alignment_test=False
-):
-    total_bounds = (np.inf, np.inf, -np.inf, -np.inf)
-    first_line_bounds = list(total_bounds).copy()
-    wgs = [Waveguide.make_at_port(prt) for prt in ports]
-    first_bend = -np.pi/2
-    if is_incoupling:
-        first_bend = np.pi/2
-    coupler_positions = coupler_positions[::-1]
-    for idx, wg in enumerate(wgs):
-        if is_incoupling:
-            wg._current_port.angle = -np.pi/2
-            wg.add_straight_segment(param['wg_sep']*(3-idx))
-        else:
-            wg.add_straight_segment(param['wg_sep']*(idx))
-        # first bend then heading away from structure
-        wg.add_bend(first_bend, param['min_radius'])
-        if is_incoupling:
-            wg.add_straight_segment_until_x(
-                coupler_positions[-1][0] - param['min_radius']
-            )
-            if idx == 0:
-                first_line_bounds = list(
-                    update_bounds(
-                        first_line_bounds,
-                        wg.get_shapely_outline().bounds
-                    )
-                )
-                # if alignment_test:
-                first_line_bounds[2] -= 2*127
-                first_line_bounds[0] -= 10
-                first_line_bounds[1] -= 10
-                if region_marker is None:
-                    region_marker = bounds_to_polygon(first_line_bounds)
-                _, region_marker = wf_line_from_bounds(
-                    cell=cell,
-                    bounds=first_line_bounds,
-                    region_marker=region_marker,
-                    wf_maxlength=1040,
-                    wf_layer=param['wf_layer'],
-                    axis=0,
-                    direction=1
-                )
+# def wgs_to_fiber_array(
+#     cell,
+#     ports,
+#     coupler_positions,
+#     region_marker,
+#     is_incoupling,
+#     param,
+#     all_wf_layers=[],
+#     all_region_markers=[],
+#     alignment_test=False
+# ):
+#     total_bounds = (np.inf, np.inf, -np.inf, -np.inf)
+#     first_line_bounds = list(total_bounds).copy()
+#     wgs = [Waveguide.make_at_port(prt) for prt in ports]
+#     first_bend = -np.pi/2
+#     if is_incoupling:
+#         first_bend = np.pi/2
+#     coupler_positions = coupler_positions[::-1]
+#     for idx, wg in enumerate(wgs):
+#         if is_incoupling:
+#             wg._current_port.angle = -np.pi/2
+#             wg.add_straight_segment(param['wg_sep']*(3-idx))
+#         else:
+#             wg.add_straight_segment(param['wg_sep']*(idx))
+#         # first bend then heading away from structure
+#         wg.add_bend(first_bend, param['min_radius'])
+#         if is_incoupling:
+#             wg.add_straight_segment_until_x(
+#                 coupler_positions[-1][0] - param['min_radius']
+#             )
+#             if idx == 0:
+#                 first_line_bounds = list(
+#                     update_bounds(
+#                         first_line_bounds,
+#                         wg.get_shapely_outline().bounds
+#                     )
+#                 )
+#                 # if alignment_test:
+#                 first_line_bounds[2] -= 2*127
+#                 first_line_bounds[0] -= 10
+#                 first_line_bounds[1] -= 10
+#                 if region_marker is None:
+#                     region_marker = bounds_to_polygon(first_line_bounds)
+#                 _, region_marker = wf_line_from_bounds(
+#                     cell=cell,
+#                     bounds=first_line_bounds,
+#                     region_marker=region_marker,
+#                     wf_maxlength=1040,
+#                     wf_layer=param['wf_layer'],
+#                     axis=0,
+#                     direction=1
+#                 )
 
-            wg.add_straight_segment_until_x(
-                coupler_positions[idx][0] - param['min_radius']
-            )
-            wg.add_bend(first_bend, param['min_radius'])
-            wg.add_straight_segment_until_y(
-                coupler_positions[idx][1]
-            )
-            gc = GratingCoupler.make_traditional_coupler_at_port(
-                wg.current_port, **param['gc_params']
-            )
-            if idx == 0:
-                second_line_bounds = [
-                    first_line_bounds[2],
-                    first_line_bounds[1],
-                    (wg.current_port.origin[0]
-                     + 127/2 - 10),
-                    first_line_bounds[1] + 1040
-                ]
-            cell.add_to_layer(param['wg_layer'], gc, wg)
-            add_markers_to_top(
-                cell=cell,
-                wf_bounds=second_line_bounds,
-                device_top_bound=(
-                    wgs[0].current_port.origin[1]+70
-                ),
-                marker_dims=20,
-                wg_layer=param['wg_layer'],
-                marker_layer_1=3,
-                marker_layer_2=4,
-                marker_protection_layer=15
-            )
+#             wg.add_straight_segment_until_x(
+#                 coupler_positions[idx][0] - param['min_radius']
+#             )
+#             wg.add_bend(first_bend, param['min_radius'])
+#             wg.add_straight_segment_until_y(
+#                 coupler_positions[idx][1]
+#             )
+#             gc = GratingCoupler.make_traditional_coupler_at_port(
+#                 wg.current_port, **param['gc_params']
+#             )
+#             if idx == 0:
+#                 second_line_bounds = [
+#                     first_line_bounds[2],
+#                     first_line_bounds[1],
+#                     (wg.current_port.origin[0]
+#                      + 127/2 - 10),
+#                     first_line_bounds[1] + 1040
+#                 ]
+#             cell.add_to_layer(param['wg_layer'], gc, wg)
+#             add_markers_to_top(
+#                 cell=cell,
+#                 wf_bounds=second_line_bounds,
+#                 device_top_bound=(
+#                     wgs[0].current_port.origin[1]+70
+#                 ),
+#                 marker_dims=20,
+#                 wg_layer=param['wg_layer'],
+#                 marker_layer_1=3,
+#                 marker_layer_2=4,
+#                 marker_protection_layer=15
+#             )
 
-        else:
-            wg.add_straight_segment_until_x(
-                coupler_positions[0][0] + param['min_radius']
-            )
-            if idx == 3:
-                first_line_bounds = list(update_bounds(
-                    first_line_bounds,
-                    wg.get_shapely_outline().bounds
-                ))
-                first_line_bounds[1] -= 10
-                first_line_bounds[2] += 10
-                # if alignment_test:
-                first_line_bounds[0] += 1.5*127
-                if region_marker is None:
-                    region_marker = bounds_to_polygon(first_line_bounds)
-                _, region_marker = wf_line_from_bounds(
-                    cell=cell,
-                    bounds=first_line_bounds,
-                    region_marker=region_marker,
-                    wf_maxlength=1040,
-                    wf_layer=param['wf_layer'],
-                    axis=0,
-                    direction=-1
-                )
+#         else:
+#             wg.add_straight_segment_until_x(
+#                 coupler_positions[0][0] + param['min_radius']
+#             )
+#             if idx == 3:
+#                 first_line_bounds = list(update_bounds(
+#                     first_line_bounds,
+#                     wg.get_shapely_outline().bounds
+#                 ))
+#                 first_line_bounds[1] -= 10
+#                 first_line_bounds[2] += 10
+#                 # if alignment_test:
+#                 first_line_bounds[0] += 1.5*127
+#                 if region_marker is None:
+#                     region_marker = bounds_to_polygon(first_line_bounds)
+#                 _, region_marker = wf_line_from_bounds(
+#                     cell=cell,
+#                     bounds=first_line_bounds,
+#                     region_marker=region_marker,
+#                     wf_maxlength=1040,
+#                     wf_layer=param['wf_layer'],
+#                     axis=0,
+#                     direction=-1
+#                 )
 
-            wg.add_straight_segment_until_x(
-                coupler_positions[idx][0] + param['min_radius']
-            )
-            wg.add_bend(first_bend, param['min_radius'])
-            wg.add_straight_segment_until_y(
-                coupler_positions[idx][1]
-            )
-            gc = GratingCoupler.make_traditional_coupler_at_port(
-                wg.current_port, **param['gc_params']
-            )
-            cell.add_to_layer(param['wg_layer'], gc, wg)
-            if idx == 3:
-                second_line_bounds = [
-                    (wg.current_port.origin[0]
-                     - 127/2+10),
-                    first_line_bounds[1],
-                    first_line_bounds[0],
-                    first_line_bounds[1] + 1040
-                ]
-    if alignment_test:
-        test_coupler_positions = [
-            [
-                coupler_positions[-1][0] - 127,
-                coupler_positions[-1][1]
-            ],
-            [
-                coupler_positions[-1][0] - 2*127,  # +8*127
-                coupler_positions[-1][1]
-            ]
-        ]
-        test_port = Port(test_coupler_positions[0],
-                         np.pi/2.0,
-                         wgs[0].width)
-        test_gc_0 = GratingCoupler.make_traditional_coupler_at_port(
-            test_port, **param['gc_params']
-        )
-        test_wg = Waveguide.make_at_port(test_gc_0.port)
-        test_wg._current_port.angle = -np.pi/2
-        test_wg.add_bend(-np.pi/2, param['min_radius'])
-        test_wg.add_straight_segment_until_x(
-            test_coupler_positions[1][0] + param['min_radius']
-        )
-        test_wg.add_bend(-np.pi/2, param['min_radius'])
-        test_gc_1 = GratingCoupler.make_traditional_coupler_at_port(
-            test_wg.current_port, **param['gc_params']
-        )
-        cell.add_to_layer(param['wg_layer'], test_wg, test_gc_0, test_gc_1)
+#             wg.add_straight_segment_until_x(
+#                 coupler_positions[idx][0] + param['min_radius']
+#             )
+#             wg.add_bend(first_bend, param['min_radius'])
+#             wg.add_straight_segment_until_y(
+#                 coupler_positions[idx][1]
+#             )
+#             gc = GratingCoupler.make_traditional_coupler_at_port(
+#                 wg.current_port, **param['gc_params']
+#             )
+#             cell.add_to_layer(param['wg_layer'], gc, wg)
+#             if idx == 3:
+#                 second_line_bounds = [
+#                     (wg.current_port.origin[0]
+#                      - 127/2+10),
+#                     first_line_bounds[1],
+#                     first_line_bounds[0],
+#                     first_line_bounds[1] + 1040
+#                 ]
+#     if alignment_test:
+#         test_coupler_positions = [
+#             [
+#                 coupler_positions[-1][0] - 127,
+#                 coupler_positions[-1][1]
+#             ],
+#             [
+#                 coupler_positions[-1][0] - 2*127,  # +8*127
+#                 coupler_positions[-1][1]
+#             ]
+#         ]
+#         test_port = Port(test_coupler_positions[0],
+#                          np.pi/2.0,
+#                          wgs[0].width)
+#         test_gc_0 = GratingCoupler.make_traditional_coupler_at_port(
+#             test_port, **param['gc_params']
+#         )
+#         test_wg = Waveguide.make_at_port(test_gc_0.port)
+#         test_wg._current_port.angle = -np.pi/2
+#         test_wg.add_bend(-np.pi/2, param['min_radius'])
+#         test_wg.add_straight_segment_until_x(
+#             test_coupler_positions[1][0] + param['min_radius']
+#         )
+#         test_wg.add_bend(-np.pi/2, param['min_radius'])
+#         test_gc_1 = GratingCoupler.make_traditional_coupler_at_port(
+#             test_wg.current_port, **param['gc_params']
+#         )
+#         cell.add_to_layer(param['wg_layer'], test_wg, test_gc_0, test_gc_1)
 
-    _, region_marker = wf_line_from_bounds(
-        cell=cell,
-        bounds=second_line_bounds,
-        region_marker=region_marker,
-        wf_maxlength=1040,
-        wf_layer=param['wf_layer'],
-        axis=1,
-        direction=1
-    )
-    if is_incoupling:
-        for idx in range(len(all_wf_layers)):
-            all_region_markers[idx] = bounds_to_polygon(second_line_bounds)
-            _, all_region_markers[idx] = wf_line_from_bounds(
-                cell=cell,
-                bounds=second_line_bounds,
-                region_marker=all_region_markers[idx],
-                wf_maxlength=1040,
-                wf_layer=all_wf_layers[idx],
-                axis=1,
-                direction=1
-            )
+#     _, region_marker = wf_line_from_bounds(
+#         cell=cell,
+#         bounds=second_line_bounds,
+#         region_marker=region_marker,
+#         wf_maxlength=1040,
+#         wf_layer=param['wf_layer'],
+#         axis=1,
+#         direction=1
+#     )
+#     if is_incoupling:
+#         for idx in range(len(all_wf_layers)):
+#             all_region_markers[idx] = bounds_to_polygon(second_line_bounds)
+#             _, all_region_markers[idx] = wf_line_from_bounds(
+#                 cell=cell,
+#                 bounds=second_line_bounds,
+#                 region_marker=all_region_markers[idx],
+#                 wf_maxlength=1040,
+#                 wf_layer=all_wf_layers[idx],
+#                 axis=1,
+#                 direction=1
+#             )
 
-    total_bounds = update_bounds(first_line_bounds, second_line_bounds)
-    return total_bounds, region_marker
+#     total_bounds = update_bounds(first_line_bounds, second_line_bounds)
+#     return total_bounds, region_marker
 
 
 def interferometer_and_fiber_array(
@@ -766,7 +688,7 @@ def interferometer_and_fiber_array(
         'sm_wg_width': 0.5,
         'mm_wg_width': 0.5,
         'mm_taper_length': 0,
-        'min_radius': 50,
+        'min_radius': 70,
         'mzi_sep_leeway': 50,
         'wg_sep': 25,
         'electrode_wg_sep': 100,
@@ -778,7 +700,6 @@ def interferometer_and_fiber_array(
         'coupler_length': 18,
         # For electrodes
         'electrode_length': 1250,
-        # For electrode function
         'electrode_width': 25,
         'electrode_sep': 1.1,
         'crossing_width': 10,
@@ -793,6 +714,8 @@ def interferometer_and_fiber_array(
         'contact_pad_sep': 150,
         'electrode_pad_seps': (30, 30),
         'pad_sep': 300,
+        'last_interferometer': False,
+        'ground_pad_width': 7000,
         # For grating couplers
         'alignment_test': True,
         # For layers and writefields
@@ -804,6 +727,7 @@ def interferometer_and_fiber_array(
         # For writefields
         'wf_maxlength': 1040,
         'wf_leeways': (10, 10),
+        'electrode_wf_leeways': (0, 0),
         'wf_x_sep': 10,
         'wf_electrode_leeways': (10, 10),
         'wg_region_layer': 101,
@@ -885,7 +809,6 @@ def interferometer_and_fiber_array(
     outports = [wg.current_port for wg in wgs]
 
     total_bounds = update_bounds(total_bounds, incoupling_bounds)
-
     outcoupling_bounds, region_marker = wgs_to_fiber_array(
         cell=cell,
         ports=outports,
@@ -898,4 +821,4 @@ def interferometer_and_fiber_array(
     cell.add_to_layer(param['wg_region_layer'], region_marker)
     total_bounds = update_bounds(total_bounds, outcoupling_bounds)
 
-    return total_bounds
+    return total_bounds, initial_wf_point, incoupling_bounds

@@ -33,40 +33,42 @@ from tech.LiNb01 import *
 
 
 #######################################################
-def Ring_Test(label, gap, ring_r):
+def Ring_Test(label, gap, ring_r, ring_wg_width=wg_width):
     cell = Cell('Ring_Test' + label)
 
-    r_bend = bend_r
+    r_bend = 60 #bend_r
     r_eff = r_bend / euler_to_bend_coeff
 
-    outports = [Port((opt_space * i, 0), np.pi / 2, wg_width) for i in (0, 1)]
+    outports = [Port((opt_space * i, 0), np.pi / 2, std_coupler_params['width']) for i in (0, 1)]
     gratingcouplers = [GratingCoupler.make_traditional_coupler_at_port(outport, **std_coupler_params) for outport in
                        outports]
 
     port = outports[0].inverted_direction
 
     wg = Waveguide.make_at_port(port)
+    wg.add_straight_segment(grating_added_taper_len, wg_width)
     # wgAdd_EulerBend(wg, np.pi / 2., r_eff, False)
-    wg.add_bend(np.pi / 2., bend_r)
+    wg.add_bend(np.pi / 2., r_bend)
 
     dist_straight = opt_space - 2 * r_bend
     wg.add_straight_segment(dist_straight / 2.)
 
-    ring_res = RingResonator.make_at_port(wg.current_port.inverted_direction, gap=gap, radius=ring_r)
+    ring_res = RingResonator.make_at_port(wg.current_port.inverted_direction, gap=gap, radius=ring_r, res_wg_width=ring_wg_width)
 
     wg.add_straight_segment(dist_straight / 2.)
 
     # wgAdd_EulerBend(wg, np.pi / 2., r_eff, False)
-    wg.add_bend(np.pi / 2., bend_r)
-    wg.add_straight_segment_until_level_of_port(outports[1])
+    wg.add_bend(np.pi / 2., r_bend)
+    wg.add_straight_segment_until_y(outports[1].origin[1]-grating_added_taper_len)
+    wg.add_straight_segment(grating_added_taper_len, std_coupler_params['width'])
 
-    label_txt = Text((opt_space / 2., 0), 25, label, alignment='center-top')
+    label_txt = Text((opt_space / 2., -6), 25, label, alignment='center-top')
 
     shapely_object = geometric_union(gratingcouplers + [label_txt] + [wg] + [ring_res])
     cell.add_to_layer(wg_layer, shapely_object)
 
     comments = Text((60, 40), 10,
-                    'gap={:.2f}\nrad={:.2f}'.format(gap, ring_r),
+                    'gap={:.2f}\nrad={:.2f}\nwg_width={:.2f}'.format(gap, ring_r, ring_wg_width),
                     alignment='center-top')
     cell.add_to_layer(comment_layer, comments)
 
@@ -93,31 +95,33 @@ def Ring_Test(label, gap, ring_r):
 
 
 #####################################################################
-def Efficiency_Grating(label, period, ff):
+def Efficiency_Grating(label, period, ff, grating_angle = None):
     cell = Cell('GC_Test' + label)
 
-    r_bend = bend_r
+    r_bend = 60 #bend_r
     r_eff = r_bend / euler_to_bend_coeff
 
     coupler_params = std_coupler_params.copy()
     coupler_params['grating_period'] = period
     coupler_params['grating_ff'] = ff
+    if grating_angle is not None:
+        coupler_params['full_opening_angle'] = grating_angle
 
-    outports = [Port((opt_space * i, 0), np.pi / 2, wg_width) for i in (0, 1)]
-    gratingcouplers = [GratingCoupler.make_traditional_coupler_at_port(outport, **std_coupler_params) for outport in
+    outports = [Port((opt_space * i, 0), np.pi / 2, std_coupler_params['width']) for i in (0, 1)]
+    gratingcouplers = [GratingCoupler.make_traditional_coupler_at_port(outport, **coupler_params) for outport in
                        outports]
 
     port = outports[0].inverted_direction
 
     wg = Waveguide.make_at_port(port)
-    # wgAdd_EulerBend(wg, np.pi / 2., r_eff, False)
-    wg.add_bend(np.pi / 2., bend_r)
+    wg.add_straight_segment(grating_added_taper_len, wg_width)
+    wg.add_bend(np.pi / 2., r_bend)
     wg.add_straight_segment(opt_space - 2 * r_bend)
-    # wgAdd_EulerBend(wg, np.pi / 2., r_eff, False)
-    wg.add_bend(np.pi / 2., bend_r)
-    wg.add_straight_segment_until_level_of_port(outports[1])
+    wg.add_bend(np.pi / 2., r_bend)
+    wg.add_straight_segment_until_y(outports[1].origin[1]-grating_added_taper_len)
+    wg.add_straight_segment(grating_added_taper_len, std_coupler_params['width'])
 
-    label_txt = Text((opt_space / 2., 0), 25, label, alignment='center-top')
+    label_txt = Text((opt_space / 2., -6), 25, label, alignment='center-top')
 
     # self.shapely_object = geometric_union([wg] + [label] + gratingcouplers)
     shapely_object = geometric_union(gratingcouplers + [label_txt] + [wg])
@@ -153,11 +157,15 @@ def Efficiency_Grating(label, period, ff):
 
 ###################################################################################
 ### tests using MZIs
-def DirectionalCouplersTest(label, gap, length, AMZI_DeltaL, r_curve=50):
+def DirectionalCouplersTest(label, gap, length, AMZI_DeltaL, r_curve=50, grating_angle = None):
     cell = Cell('DC_Test' + label)
     couplerList = []
     outports = []
     wgs = []
+
+    coupler_params = std_coupler_params.copy()
+    if grating_angle is not None:
+        coupler_params['full_opening_angle'] = grating_angle
 
     r_eff = r_curve / euler_to_bend_coeff
 
@@ -220,7 +228,7 @@ def DirectionalCouplersTest(label, gap, length, AMZI_DeltaL, r_curve=50):
     wg.add_straight_segment(50, final_width=0.1)
     wgs.append(wg)
 
-    gratingcouplers = [GratingCoupler.make_traditional_coupler_at_port(outport, **std_coupler_params) for outport in
+    gratingcouplers = [GratingCoupler.make_traditional_coupler_at_port(outport, **coupler_params) for outport in
                        outports]
 
     label_txt = Text((180, 70), 25, label, alignment='center-top')
@@ -257,15 +265,17 @@ def DirectionalCouplersTest(label, gap, length, AMZI_DeltaL, r_curve=50):
 
 
 ###################################################################################
-def DirectionalCouplersTest_standard(label, coupler_sep, coupler_length):
+def DirectionalCouplersTest_standard(label, coupler_sep, coupler_length, grating_angle = None):
     cell = Cell('DC_standard_test'+label)
+
+    coupler_params = std_coupler_params.copy()
+    if grating_angle is not None:
+        coupler_params['full_opening_angle'] = grating_angle
 
     x_in = 0
     y_in = 0
 
     ##Generating input and output grating couplers
-
-    coupler_params = std_coupler_params.copy()
 
     for j in (0, 1):
         incoupler = GratingCoupler.make_traditional_coupler((x_in + j * 127, y_in), **coupler_params)
@@ -277,11 +287,11 @@ def DirectionalCouplersTest_standard(label, coupler_sep, coupler_length):
 
     ###Generating waveguides
 
-    inports = [Port((x_in + j * 127, y_in), np.deg2rad(90), wg_width) for j in (0, 1)]
+    inports = [Port((x_in + j * 127, y_in), np.deg2rad(90), std_coupler_params['width']) for j in (0, 1)]
     wg = [Waveguide.make_at_port(inport) for inport in inports]
 
     for j in (0, 1):
-        wg[j].add_straight_segment(30)
+        wg[j].add_straight_segment(grating_added_taper_len, wg_width)
 
         ##directional coupler with sinusoidal s-bend
         x_length = 130
@@ -296,7 +306,8 @@ def DirectionalCouplersTest_standard(label, coupler_sep, coupler_length):
         wg[j].add_straight_segment(30)
 
         wg[j].add_bend(np.pi - j * 2 * np.pi, 127 / 2.0)
-        wg[j].add_straight_segment_until_y(y_in)
+        wg[j].add_straight_segment_until_y(y_in+grating_added_taper_len)
+        wg[j].add_straight_segment(grating_added_taper_len, std_coupler_params['width'])
 
     for j in (0, 1):
         cell.add_to_layer(wg_layer, wg[j])
@@ -325,7 +336,7 @@ def DirectionalCouplersTest_standard(label, coupler_sep, coupler_length):
 
 
 ##########################################################################
-def RectangularSpiral(label, num, add_xlength=0., add_ylength=100., sep=4., r_curve=50., return_xmax=False):
+def RectangularSpiral(label, num, add_xlength=0., add_ylength=100., sep=4., r_curve=50., return_xmax=False, grating_angle = None, exp_wg_width=wg_Expwidth, grating_coupler_period = std_coupler_params['grating_period']):
     cell = Cell('DC_Test' + label)
 
     r_eff = r_curve / euler_to_bend_coeff
@@ -334,6 +345,9 @@ def RectangularSpiral(label, num, add_xlength=0., add_ylength=100., sep=4., r_cu
     orizontal_length = add_xlength + 2 * sep
 
     coupler_params = std_coupler_params.copy()
+    coupler_params['grating_period'] = grating_coupler_period
+    if grating_angle is not None:
+        coupler_params['full_opening_angle'] = grating_angle
 
     grating_coupl_pos = np.array((0, 0))
 
@@ -342,39 +356,46 @@ def RectangularSpiral(label, num, add_xlength=0., add_ylength=100., sep=4., r_cu
         in
         (0, 1)]
 
-    ports = [Port(grating_coupl_pos - (opt_space * x, 0), np.pi / 2, wg_width) for x in (0, 1)]
+    # ports = [Port(grating_coupl_pos - (opt_space * x, 0), np.pi / 2, wg_width) for x in (0, 1)]
+    ### Adding final tapers as suggested by Munster, SP 21/10/21
+    ports = [Port(grating_coupl_pos - (opt_space * x, 0), np.pi / 2, std_coupler_params['width']) for x in (0, 1)]
 
     couplers = [GratingCoupler.make_traditional_coupler_at_port(port, **coupler_params) for port in ports]
 
     waveguides = [Waveguide.make_at_port(port.inverted_direction) for port in ports]
+    ### Adding final tapers as suggested by Munster, SP 21/10/21
+    waveguides[0].add_straight_segment(grating_added_taper_len, final_width=wg_width)
     waveguides[0].add_straight_segment(sep, final_width=wg_width)
     wgAdd_EulerBend(waveguides[0], -np.pi / 2, r_eff, True)
     waveguides[0].add_straight_segment(sep + opt_space)
     wgAdd_EulerBend(waveguides[0], -np.pi / 2., r_eff, True)
 
+    ### Adding final tapers as suggested by Munster, SP 21/10/21
+    waveguides[1].add_straight_segment(grating_added_taper_len, final_width=wg_width)
     wgAdd_EulerBend(waveguides[1], -np.pi / 2., r_eff, True)
     wgAdd_EulerBend(waveguides[1], -np.pi / 2., r_eff, True)
+    waveguides[1].add_straight_segment(grating_added_taper_len, final_width=wg_width)
 
     origin_spiral = Port((-opt_space / 2., 320 + add_ylength / 2. + num * sep), 0, wg_width)
 
     wg1 = Waveguide.make_at_port(origin_spiral)
     wgAdd_EulerBend(wg1, -np.pi / 2., r_eff, True)
     if add_ylength > (4 * l_Exptaper):
-        wg1.add_straight_segment(l_Exptaper, final_width=wg_Expwidth)
+        wg1.add_straight_segment(l_Exptaper, final_width=exp_wg_width)
         wg1.add_straight_segment(add_ylength / 2. - 2 * l_Exptaper)
         wg1.add_straight_segment(l_Exptaper, final_width=wg_width)
     else:
         wg1.add_straight_segment(add_ylength / 2.)
     wgAdd_EulerBend(wg1, -np.pi / 2., r_eff, True)
     if (add_xlength / 2. + sep) > (2 * l_Exptaper):
-        wg1.add_straight_segment(l_Exptaper, final_width=wg_Expwidth)
+        wg1.add_straight_segment(l_Exptaper, final_width=exp_wg_width)
         wg1.add_straight_segment(add_xlength / 2. + sep - 2 * l_Exptaper)
         wg1.add_straight_segment(l_Exptaper, final_width=wg_width)
     else:
         wg1.add_straight_segment(add_xlength / 2. + sep)
     wgAdd_EulerBend(wg1, -np.pi / 2., r_eff, True)
     if (sep + add_ylength + 2 * r_curve) > (2 * l_Exptaper):
-        wg1.add_straight_segment(l_Exptaper, final_width=wg_Expwidth)
+        wg1.add_straight_segment(l_Exptaper, final_width=exp_wg_width)
         wg1.add_straight_segment(sep + add_ylength + 2 * r_curve - 2 * l_Exptaper)
         wg1.add_straight_segment(l_Exptaper, final_width=wg_width)
     else:
@@ -384,35 +405,35 @@ def RectangularSpiral(label, num, add_xlength=0., add_ylength=100., sep=4., r_cu
     wg2 = Waveguide.make_at_port(origin_spiral.inverted_direction)
     wgAdd_EulerBend(wg2, -np.pi / 2., r_eff, True)
     if add_ylength > (4 * l_Exptaper):
-        wg2.add_straight_segment(l_Exptaper, final_width=wg_Expwidth)
+        wg2.add_straight_segment(l_Exptaper, final_width=exp_wg_width)
         wg2.add_straight_segment(add_ylength / 2. - 2 * l_Exptaper)
         wg2.add_straight_segment(l_Exptaper, final_width=wg_width)
     else:
         wg2.add_straight_segment(add_ylength / 2.)
     wgAdd_EulerBend(wg2, -np.pi / 2., r_eff, True)
     if (add_xlength / 2. + sep) > (2 * l_Exptaper):
-        wg2.add_straight_segment(l_Exptaper, final_width=wg_Expwidth)
+        wg2.add_straight_segment(l_Exptaper, final_width=exp_wg_width)
         wg2.add_straight_segment(add_xlength / 2. + sep - 2 * l_Exptaper)
         wg2.add_straight_segment(l_Exptaper, final_width=wg_width)
     else:
         wg2.add_straight_segment(add_xlength / 2. + sep)
     wgAdd_EulerBend(wg2, -np.pi / 2., r_eff, True)
     if (sep + add_ylength + 2 * r_curve) > (2 * l_Exptaper):
-        wg2.add_straight_segment(l_Exptaper, final_width=wg_Expwidth)
+        wg2.add_straight_segment(l_Exptaper, final_width=exp_wg_width)
         wg2.add_straight_segment(sep + add_ylength + 2 * r_curve - 2 * l_Exptaper)
         wg2.add_straight_segment(l_Exptaper, final_width=wg_width)
     else:
         wg2.add_straight_segment(sep + add_ylength + 2 * r_curve)
     wgAdd_EulerBend(wg2, -np.pi / 2., r_eff, True)
     if (orizontal_length + sep) > (2 * l_Exptaper):
-        wg2.add_straight_segment(l_Exptaper, final_width=wg_Expwidth)
+        wg2.add_straight_segment(l_Exptaper, final_width=exp_wg_width)
         wg2.add_straight_segment(orizontal_length + sep - 2 * l_Exptaper)
         wg2.add_straight_segment(l_Exptaper, final_width=wg_width)
     else:
         wg2.add_straight_segment(orizontal_length + sep)
     wgAdd_EulerBend(wg2, -np.pi / 2., r_eff, True)
     if (sep + delta + add_ylength + 2 * r_curve) > (2 * l_Exptaper):
-        wg2.add_straight_segment(l_Exptaper, final_width=wg_Expwidth)
+        wg2.add_straight_segment(l_Exptaper, final_width=exp_wg_width)
         wg2.add_straight_segment(sep + delta + add_ylength + 2 * r_curve - 2 * l_Exptaper)
         wg2.add_straight_segment(l_Exptaper, final_width=wg_width)
     else:
@@ -421,14 +442,14 @@ def RectangularSpiral(label, num, add_xlength=0., add_ylength=100., sep=4., r_cu
 
     for i in np.arange(1, num):
         if (orizontal_length + delta * i - sep) > (2 * l_Exptaper):
-            wg1.add_straight_segment(l_Exptaper, final_width=wg_Expwidth)
+            wg1.add_straight_segment(l_Exptaper, final_width=exp_wg_width)
             wg1.add_straight_segment(orizontal_length + delta * i - sep - 2 * l_Exptaper)
             wg1.add_straight_segment(l_Exptaper, final_width=wg_width)
         else:
             wg1.add_straight_segment(orizontal_length + delta * i - sep)
         wgAdd_EulerBend(wg1, -np.pi / 2., r_eff, True)
         if (delta * i + sep + add_ylength + 2 * r_curve) > (2 * l_Exptaper):
-            wg1.add_straight_segment(l_Exptaper, final_width=wg_Expwidth)
+            wg1.add_straight_segment(l_Exptaper, final_width=exp_wg_width)
             wg1.add_straight_segment(delta * i + sep + add_ylength + 2 * r_curve - 2 * l_Exptaper)
             wg1.add_straight_segment(l_Exptaper, final_width=wg_width)
         else:
@@ -437,44 +458,44 @@ def RectangularSpiral(label, num, add_xlength=0., add_ylength=100., sep=4., r_cu
 
     for j in np.arange(2, num):
         if (orizontal_length + j * delta - sep) > (2 * l_Exptaper):
-            wg2.add_straight_segment(l_Exptaper, final_width=wg_Expwidth)
+            wg2.add_straight_segment(l_Exptaper, final_width=exp_wg_width)
             wg2.add_straight_segment(orizontal_length + j * delta - sep - 2 * l_Exptaper)
             wg2.add_straight_segment(l_Exptaper, final_width=wg_width)
         else:
             wg2.add_straight_segment(orizontal_length + j * delta - sep)
         wgAdd_EulerBend(wg2, -np.pi / 2., r_eff, True)
         if (delta * (j + 1) - sep + add_ylength + 2 * r_curve) > (2 * l_Exptaper):
-            wg2.add_straight_segment(l_Exptaper, final_width=wg_Expwidth)
+            wg2.add_straight_segment(l_Exptaper, final_width=exp_wg_width)
             wg2.add_straight_segment(delta * (j + 1) - sep + add_ylength + 2 * r_curve - 2 * l_Exptaper)
             wg2.add_straight_segment(l_Exptaper, final_width=wg_width)
         else:
             wg2.add_straight_segment(delta * (j + 1) - sep + add_ylength + 2 * r_curve)
         wgAdd_EulerBend(wg2, -np.pi / 2., r_eff, True)
 
-    waveguides[0].add_straight_segment(l_Exptaper, final_width=wg_Expwidth)
+    waveguides[0].add_straight_segment(l_Exptaper, final_width=exp_wg_width)
     waveguides[0].add_straight_segment_until_y(wg1.y - r_curve - l_Exptaper)
     waveguides[0].add_straight_segment(l_Exptaper, final_width=wg_width)
     wgAdd_EulerBend(waveguides[0], -np.pi / 2., r_eff, True)
-    waveguides[0].add_straight_segment(l_Exptaper, final_width=wg_Expwidth)
+    waveguides[0].add_straight_segment(l_Exptaper, final_width=exp_wg_width)
     waveguides[0].add_straight_segment_until_x(wg1.x - l_Exptaper)
     waveguides[0].add_straight_segment(l_Exptaper, final_width=wg_width)
 
     waveguides[1].add_straight_segment(r_curve / 2., final_width=wg_width)
     wgAdd_EulerBend(waveguides[1], -np.pi / 2., r_eff, True)
-
+    #
     if (num * delta - sep + orizontal_length) > 2 * l_Exptaper:
-        wg2.add_straight_segment(l_Exptaper, final_width=wg_Expwidth)
+        wg2.add_straight_segment(l_Exptaper, final_width=exp_wg_width)
         wg2.add_straight_segment(num * delta - sep + orizontal_length - 2 * l_Exptaper)
         wg2.add_straight_segment(l_Exptaper, final_width=wg_width)
     else:
         wg2.add_straight_segment(num * delta - sep + orizontal_length)
     wgAdd_EulerBend(wg2, -np.pi / 2., r_eff, True)
 
-    waveguides[1].add_straight_segment(l_Exptaper, final_width=wg_Expwidth)
+    waveguides[1].add_straight_segment(l_Exptaper, final_width=exp_wg_width)
     waveguides[1].add_straight_segment_until_x(wg2.x - r_curve - l_Exptaper)
     waveguides[1].add_straight_segment(l_Exptaper, final_width=wg_width)
     wgAdd_EulerBend(waveguides[1], np.pi / 2., r_eff, False)
-    waveguides[1].add_straight_segment(l_Exptaper, final_width=wg_Expwidth)
+    waveguides[1].add_straight_segment(l_Exptaper, final_width=exp_wg_width)
     waveguides[1].add_straight_segment_until_y(wg2.y - l_Exptaper)
     waveguides[1].add_straight_segment(l_Exptaper, final_width=wg_width)
 

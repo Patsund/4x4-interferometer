@@ -110,10 +110,10 @@ def add_markers_to_top(cell,
                        marker_layer_1,
                        marker_layer_2,
                        marker_protection_layer):
-    marker_positions_1 = [(wf_bounds[0] + 1.5*marker_dims,
-                           wf_bounds[3] - 1.5*marker_dims-100),
+    marker_positions_1 = [(wf_bounds[0] + 1.5*marker_dims+20,
+                           wf_bounds[3] - 1.5*marker_dims-80),
                           (wf_bounds[2] - 1.5*marker_dims,
-                           wf_bounds[3] - 1.5*marker_dims-100),
+                           wf_bounds[3] - 1.5*marker_dims-80),
                           (wf_bounds[2] - 1.5*marker_dims,
                            device_top_bound + 80
                            + 3*marker_dims)]

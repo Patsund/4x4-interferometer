@@ -28,8 +28,8 @@ from euler_curves import wgAdd_EulerBend, EulerLength, wgAdd_EulerSBend
 from tech.LiNb01 import *
 
 
-def TimeBin_BS(label, num, add_xlength=0., add_ylength=100., sep=4., r_curve=50., coupler_sep=0.4, coupler_length=30,
-               MZ_length=1250, electrodes_sep=1.1, return_xmax=False):
+def TimeBin_BS(label, num, add_xlength=0., add_ylength=100., sep=4., r_curve=50., coupler_sep=0.5, coupler_length=30,
+               MZ_length=1250, electrodes_sep=1.1, return_xmax=False, dx_adj=0, exp_wg_width=wg_Expwidth, grating_coupler_period = std_coupler_params['grating_period']):
     cell = Cell('TimeBinBS_active' + label)
 
     x_in = 0
@@ -48,7 +48,7 @@ def TimeBin_BS(label, num, add_xlength=0., add_ylength=100., sep=4., r_curve=50.
     ##Generating input and output grating couplers
 
     coupler_params = std_coupler_params.copy()
-
+    coupler_params['grating_period'] = grating_coupler_period
     # for j in (0, 1):
     #     incoupler = GratingCoupler.make_traditional_coupler((x_in + j * opt_space, y_in), **coupler_params)
     #     cell.add_to_layer(wg_layer, incoupler)
@@ -109,21 +109,21 @@ def TimeBin_BS(label, num, add_xlength=0., add_ylength=100., sep=4., r_curve=50.
     wg1 = Waveguide.make_at_port(origin_spiral)
     wgAdd_EulerBend(wg1, -np.pi / 2., r_eff, True)
     if add_ylength > (4 * l_Exptaper):
-        wg1.add_straight_segment(l_Exptaper, final_width=wg_Expwidth)
+        wg1.add_straight_segment(l_Exptaper, final_width=exp_wg_width)
         wg1.add_straight_segment(add_ylength / 2. - 2 * l_Exptaper)
         wg1.add_straight_segment(l_Exptaper, final_width=wg_width)
     else:
         wg1.add_straight_segment(add_ylength / 2.)
     wgAdd_EulerBend(wg1, -np.pi / 2., r_eff, True)
     if (add_xlength / 2. + sep) > (2 * l_Exptaper):
-        wg1.add_straight_segment(l_Exptaper, final_width=wg_Expwidth)
+        wg1.add_straight_segment(l_Exptaper, final_width=exp_wg_width)
         wg1.add_straight_segment(add_xlength / 2. + sep - 2 * l_Exptaper)
         wg1.add_straight_segment(l_Exptaper, final_width=wg_width)
     else:
         wg1.add_straight_segment(add_xlength / 2. + sep)
     wgAdd_EulerBend(wg1, -np.pi / 2., r_eff, True)
     if (sep + add_ylength + 2 * r_curve) > (2 * l_Exptaper):
-        wg1.add_straight_segment(l_Exptaper, final_width=wg_Expwidth)
+        wg1.add_straight_segment(l_Exptaper, final_width=exp_wg_width)
         wg1.add_straight_segment(sep + add_ylength + 2 * r_curve - 2 * l_Exptaper)
         wg1.add_straight_segment(l_Exptaper, final_width=wg_width)
     else:
@@ -133,35 +133,35 @@ def TimeBin_BS(label, num, add_xlength=0., add_ylength=100., sep=4., r_curve=50.
     wg2 = Waveguide.make_at_port(origin_spiral.inverted_direction)
     wgAdd_EulerBend(wg2, -np.pi / 2., r_eff, True)
     if add_ylength > (4 * l_Exptaper):
-        wg2.add_straight_segment(l_Exptaper, final_width=wg_Expwidth)
+        wg2.add_straight_segment(l_Exptaper, final_width=exp_wg_width)
         wg2.add_straight_segment(add_ylength / 2. - 2 * l_Exptaper)
         wg2.add_straight_segment(l_Exptaper, final_width=wg_width)
     else:
         wg2.add_straight_segment(add_ylength / 2.)
     wgAdd_EulerBend(wg2, -np.pi / 2., r_eff, True)
     if (add_xlength / 2. + sep) > (2 * l_Exptaper):
-        wg2.add_straight_segment(l_Exptaper, final_width=wg_Expwidth)
+        wg2.add_straight_segment(l_Exptaper, final_width=exp_wg_width)
         wg2.add_straight_segment(add_xlength / 2. + sep - 2 * l_Exptaper)
         wg2.add_straight_segment(l_Exptaper, final_width=wg_width)
     else:
         wg2.add_straight_segment(add_xlength / 2. + sep)
     wgAdd_EulerBend(wg2, -np.pi / 2., r_eff, True)
     if (sep + add_ylength + 2 * r_curve) > (2 * l_Exptaper):
-        wg2.add_straight_segment(l_Exptaper, final_width=wg_Expwidth)
+        wg2.add_straight_segment(l_Exptaper, final_width=exp_wg_width)
         wg2.add_straight_segment(sep + add_ylength + 2 * r_curve - 2 * l_Exptaper)
         wg2.add_straight_segment(l_Exptaper, final_width=wg_width)
     else:
         wg2.add_straight_segment(sep + add_ylength + 2 * r_curve)
     wgAdd_EulerBend(wg2, -np.pi / 2., r_eff, True)
     if (orizontal_length + sep) > (2 * l_Exptaper):
-        wg2.add_straight_segment(l_Exptaper, final_width=wg_Expwidth)
+        wg2.add_straight_segment(l_Exptaper, final_width=exp_wg_width)
         wg2.add_straight_segment(orizontal_length + sep - 2 * l_Exptaper)
         wg2.add_straight_segment(l_Exptaper, final_width=wg_width)
     else:
         wg2.add_straight_segment(orizontal_length + sep)
     wgAdd_EulerBend(wg2, -np.pi / 2., r_eff, True)
     if (sep + delta + add_ylength + 2 * r_curve) > (2 * l_Exptaper):
-        wg2.add_straight_segment(l_Exptaper, final_width=wg_Expwidth)
+        wg2.add_straight_segment(l_Exptaper, final_width=exp_wg_width)
         wg2.add_straight_segment(sep + delta + add_ylength + 2 * r_curve - 2 * l_Exptaper)
         wg2.add_straight_segment(l_Exptaper, final_width=wg_width)
     else:
@@ -170,14 +170,14 @@ def TimeBin_BS(label, num, add_xlength=0., add_ylength=100., sep=4., r_curve=50.
 
     for i in np.arange(1, num):
         if (orizontal_length + delta * i - sep) > (2 * l_Exptaper):
-            wg1.add_straight_segment(l_Exptaper, final_width=wg_Expwidth)
+            wg1.add_straight_segment(l_Exptaper, final_width=exp_wg_width)
             wg1.add_straight_segment(orizontal_length + delta * i - sep - 2 * l_Exptaper)
             wg1.add_straight_segment(l_Exptaper, final_width=wg_width)
         else:
             wg1.add_straight_segment(orizontal_length + delta * i - sep)
         wgAdd_EulerBend(wg1, -np.pi / 2., r_eff, True)
         if (delta * i + sep + add_ylength + 2 * r_curve) > (2 * l_Exptaper):
-            wg1.add_straight_segment(l_Exptaper, final_width=wg_Expwidth)
+            wg1.add_straight_segment(l_Exptaper, final_width=exp_wg_width)
             wg1.add_straight_segment(delta * i + sep + add_ylength + 2 * r_curve - 2 * l_Exptaper)
             wg1.add_straight_segment(l_Exptaper, final_width=wg_width)
         else:
@@ -186,14 +186,14 @@ def TimeBin_BS(label, num, add_xlength=0., add_ylength=100., sep=4., r_curve=50.
 
     for j in np.arange(2, num):
         if (orizontal_length + j * delta - sep) > (2 * l_Exptaper):
-            wg2.add_straight_segment(l_Exptaper, final_width=wg_Expwidth)
+            wg2.add_straight_segment(l_Exptaper, final_width=exp_wg_width)
             wg2.add_straight_segment(orizontal_length + j * delta - sep - 2 * l_Exptaper)
             wg2.add_straight_segment(l_Exptaper, final_width=wg_width)
         else:
             wg2.add_straight_segment(orizontal_length + j * delta - sep)
         wgAdd_EulerBend(wg2, -np.pi / 2., r_eff, True)
         if (delta * (j + 1) - sep + add_ylength + 2 * r_curve) > (2 * l_Exptaper):
-            wg2.add_straight_segment(l_Exptaper, final_width=wg_Expwidth)
+            wg2.add_straight_segment(l_Exptaper, final_width=exp_wg_width)
             wg2.add_straight_segment(delta * (j + 1) - sep + add_ylength + 2 * r_curve - 2 * l_Exptaper)
             wg2.add_straight_segment(l_Exptaper, final_width=wg_width)
         else:
@@ -243,12 +243,16 @@ def TimeBin_BS(label, num, add_xlength=0., add_ylength=100., sep=4., r_curve=50.
     io_conns_dist = mod_params['electrode_width'] + min_safedist_from_wg
 
     #### MZI inconn
+    add_dist=80 #added hack for updated chip. SP 24/10/21
+    dy_adj = 39
+
     MZIin_port = mzi_inports[1].inverted_direction
     wg_MZIin = Waveguide.make_at_port(MZIin_port)
+    wg_MZIin.add_straight_segment(add_dist-dy_adj)
     wgAdd_EulerBend(wg_MZIin, np.pi / 2., r_eff, False)
     wg_MZIin.add_straight_segment(io_conns_dist + opt_space)
     wgAdd_EulerBend(wg_MZIin, np.pi / 2., r_eff, False)
-    wg_MZIin.add_straight_segment(io_conns_dist)
+    wg_MZIin.add_straight_segment(io_conns_dist-dy_adj)
 
     #### MZI outconn
     MZIout_port = wg[1].current_port
@@ -257,17 +261,21 @@ def TimeBin_BS(label, num, add_xlength=0., add_ylength=100., sep=4., r_curve=50.
     wgAdd_EulerBend(wg_MZIout, -np.pi / 2., r_eff, True)
     wgAdd_EulerSBend(wg_MZIout, -mzi_inports[1].origin[0] + wg_MZIout.current_port.origin[0] + io_conns_dist, r_curve)
     wg_MZIout.add_straight_segment(l_Exptaper, final_width=wg_Expwidth)
-    wg_MZIout.add_straight_segment_until_y(mzi_inports[1].origin[1] - io_conns_dist - l_Exptaper)
+    wg_MZIout.add_straight_segment_until_y(mzi_inports[1].origin[1] - io_conns_dist - l_Exptaper + add_dist)
     wg_MZIout.add_straight_segment(l_Exptaper, final_width=wg_width)
     wgAdd_EulerBend(wg_MZIout, np.pi / 2., r_eff, False)
     wgAdd_EulerBend(wg_MZIout, np.pi / 2., r_eff, False)
 
     #### Add In/Out grating couplers
+    # adding final tapers as suggested by Munster, SP 21/10/21
+    for this_wg in [wg_MZIin, wg_MZIout]:
+        this_wg.add_straight_segment(grating_added_taper_len, final_width=std_coupler_params['width'])
+    #
     inoutcouplers = [GratingCoupler.make_traditional_coupler_at_port(this_wg.current_port, **coupler_params)
                      for this_wg in [wg_MZIin, wg_MZIout]]
-
+    #
     cell.add_to_layer(wg_layer, inoutcouplers)
-
+    #
     all_wgs = wg + [wg1, wg2, wg_to, wg_from, wg_MZIin, wg_MZIout]
     for this_wg in all_wgs:
         cell.add_to_layer(wg_layer, this_wg)
@@ -279,10 +287,59 @@ def TimeBin_BS(label, num, add_xlength=0., add_ylength=100., sep=4., r_curve=50.
     cross_width = mod_params['crossing_width']
     pads_pitch = mod_params['connector_probe_pitch']
     pads_width = mod_params['connector_probe_dims'][0]
+    pads_width_gnd = mod_params['connector_probe_dims_gnd'][0]
     pads_len = mod_params['connector_probe_dims'][1] + 600
     add_dist_wgcross = 70
     add_dist_curvespace = 20
-    x_safe_dist = ref_port.origin[0] - min_safedist_from_wg - pads_width - add_dist_wgcross - add_dist_curvespace
+    x_safe_dist = ref_port.origin[0] - min_safedist_from_wg - pads_width - add_dist_wgcross - add_dist_curvespace - 50
+
+    y_dist_safey = ref_port.origin[1] - MZ_length - 400
+    x_start_pads = ref_port.origin[0] - 40
+
+    ##right ground electrode
+    Inport = Port((ref_port.origin[0] + wg_sep + wg_sep / 2.0 + electrodes_sep / 2.0, ref_port.origin[1]),
+                  np.deg2rad(-90), electr_width)
+    g_right = Waveguide.make_at_port(Inport)
+    g_right.add_straight_segment(MZ_length - cross_width / 2.)
+    g_right._current_port.angle = g_right.current_port.angle - np.pi / 2.0
+    g_right._current_port.origin[0] = g_right.current_port.origin[0] + g_right.current_port.width / 2.0
+    g_right._current_port.width = cross_width
+    g_right.add_straight_segment(2 * wg_sep + add_dist_wgcross)
+    g_right.add_straight_segment(wg_sep, electr_width)
+    g_right.add_straight_segment_until_x(x_safe_dist)
+    ### Old version. SP 23/10/21
+    # g_right._current_port.angle = g_right.current_port.angle + np.pi / 2.0
+    # g_right._current_port.origin[0] = g_right.current_port.origin[0] + pads_width / 2.0
+    # g_right._current_port.width = pads_width
+    # g_right.add_straight_segment_until_y(g_left.current_port.origin[1])
+    # g_right._current_port.angle = g_right.current_port.angle - np.pi / 2.0
+    # g_right._current_port.origin[0] = g_right.current_port.origin[0] + g_right.current_port.width / 2.0
+    # g_right._current_port.width = pads_width / 2.
+    # g_right._current_port.origin[1] = g_right.current_port.origin[1] - g_right._current_port.width / 2.
+    # g_right.add_straight_segment(2 * pads_pitch + pads_width)
+
+    ## New version with larger gnd pads and wrapped. SP 23/10/21
+    g_right._current_port.angle = g_right.current_port.angle + np.pi / 2.0
+    g_right._current_port.origin[0] = g_right.current_port.origin[0] + g_right.current_port.width / 2.0
+    g_right.add_straight_segment_until_y(y_dist_safey + 2 * sep_econns)
+    g_right._current_port.angle = g_right.current_port.angle + np.pi / 2.0
+    g_right._current_port.origin[1] = g_right.current_port.origin[1] + g_right.current_port.width / 2.0
+    g_right.add_straight_segment_until_x(x_start_pads)
+
+    # g_right.add_straight_segment(pads_width_gnd/2.)
+    g_right._current_port.angle = g_right.current_port.angle - np.pi / 2.0
+    g_right._current_port.origin[0] = g_right.current_port.origin[0] - pads_width_gnd / 2.0
+    g_right._current_port.width = pads_width_gnd
+
+    g_right.add_straight_segment(pads_len)
+    # g_right._current_port.angle = g_right.current_port.angle - np.pi / 2.0
+    # g_right._current_port.origin[0] = g_right.current_port.origin[0] + g_right.current_port.width / 2.0
+    # g_right._current_port.width = pads_width / 2.
+    # g_right._current_port.origin[1] = g_right.current_port.origin[1] - g_right._current_port.width / 2.
+    # g_right.add_straight_segment(2 * pads_pitch + pads_width)
+
+    cell.add_to_layer(electrode_layer, g_right)
+
 
     ##left ground electrode
     Inport = Port((ref_port.origin[0] - electrodes_sep / 2.0 - wg_sep / 2.0, ref_port.origin[1]), np.deg2rad(-90),
@@ -295,11 +352,39 @@ def TimeBin_BS(label, num, add_xlength=0., add_ylength=100., sep=4., r_curve=50.
     g_left.add_straight_segment(add_dist_wgcross)
     g_left.add_straight_segment(wg_sep, electr_width)
     g_left.add_straight_segment_until_x(x_safe_dist)
-    g_left.add_straight_segment(2 * pads_pitch)
+    ### Old version. SP 23/10/21
+    # g_left.add_straight_segment(2 * pads_pitch)
+    # g_left._current_port.angle = g_left.current_port.angle + np.pi / 2.0
+    # g_left._current_port.origin[0] = g_left.current_port.origin[0] + pads_width / 2.0
+    # g_left._current_port.width = pads_width
+
+    ## New version with larger gnd pads and wrapped. SP 23/10/21
+    g_left.add_straight_segment(2*sep_econns)
     g_left._current_port.angle = g_left.current_port.angle + np.pi / 2.0
-    g_left._current_port.origin[0] = g_left.current_port.origin[0] + pads_width / 2.0
-    g_left._current_port.width = pads_width
-    g_left.add_straight_segment(pads_len)
+    g_left._current_port.origin[0] = g_left.current_port.origin[0] + g_left.current_port.width / 2.0
+    # g_left.add_straight_segment(200)
+    g_left.add_straight_segment_until_y(y_dist_safey + 2*sep_econns)
+
+    g_left._current_port.angle = g_left.current_port.angle - np.pi / 2.0
+    g_left._current_port.origin[1] = g_left.current_port.origin[1] + g_left.current_port.width / 2.0
+    g_left.add_straight_segment_until_x(x_start_pads - 2*pads_pitch - pads_width_gnd/2. - 5.)
+
+    # g_left.add_straight_segment(2 * pads_pitch + (pads_width-pads_width_gnd/2.))
+    g_left._current_port.angle = g_left.current_port.angle + np.pi / 2.0
+    g_left._current_port.origin[0] = g_left.current_port.origin[0] + pads_width_gnd / 2.0
+    g_left._current_port.width = pads_width_gnd
+    #
+    g_left.add_straight_segment_until_y(g_right.current_port.origin[1])
+
+    g_left.add_straight_segment_until_y(g_right.current_port.origin[1])
+
+    g_left._current_port.angle = g_left.current_port.angle + np.pi / 2.0
+    g_left._current_port.origin[0] = g_left.current_port.origin[0] - g_left.current_port.width / 2.0
+    g_left._current_port.width = pads_width / 2.
+    g_left._current_port.origin[1] = g_left.current_port.origin[1] - g_left._current_port.width / 2.
+    g_left.add_straight_segment(2 * pads_pitch + pads_width)
+
+
     cell.add_to_layer(electrode_layer, g_left)
 
     ## signal electrode
@@ -313,34 +398,30 @@ def TimeBin_BS(label, num, add_xlength=0., add_ylength=100., sep=4., r_curve=50.
     s.add_straight_segment(wg_sep + add_dist_wgcross)
     s.add_straight_segment(wg_sep, electr_width)
     s.add_straight_segment_until_x(x_safe_dist)
-    s.add_straight_segment(pads_pitch)
+    ### Old version. SP 23/10/21
+    # s.add_straight_segment(pads_pitch)
+    # s._current_port.angle = s.current_port.angle + np.pi / 2.0
+    # s._current_port.origin[0] = s.current_port.origin[0] + pads_width / 2.0
+    # s._current_port.width = pads_width
+
+    ### New version with larger gnd pads  and wrapped. SP 23/10/21
+    s.add_straight_segment(sep_econns)
     s._current_port.angle = s.current_port.angle + np.pi / 2.0
-    s._current_port.origin[0] = s.current_port.origin[0] + pads_width / 2.0
+    s._current_port.origin[0] = s.current_port.origin[0] + s.current_port.width / 2.0
+    s.add_straight_segment_until_y(y_dist_safey + sep_econns)
+    s._current_port.angle = s.current_port.angle + np.pi / 2.0
+    s._current_port.origin[1] = s.current_port.origin[1] + s.current_port.width / 2.0
+
+    s.add_straight_segment_until_x(x_start_pads - pads_pitch)
+
+    s._current_port.angle = s.current_port.angle - np.pi / 2.0
+    s._current_port.origin[0] = s.current_port.origin[0] - pads_width / 2.0
     s._current_port.width = pads_width
-    s.add_straight_segment_until_y(g_left.current_port.origin[1] + 50)
+    s.add_straight_segment_until_y(g_right.current_port.origin[1] + 50)
+
     cell.add_to_layer(electrode_layer, s)
 
-    ##right ground electrode
-    Inport = Port((ref_port.origin[0] + wg_sep + wg_sep / 2.0 + electrodes_sep / 2.0, ref_port.origin[1]),
-                  np.deg2rad(-90), electr_width)
-    g_right = Waveguide.make_at_port(Inport)
-    g_right.add_straight_segment(MZ_length - cross_width / 2.)
-    g_right._current_port.angle = g_right.current_port.angle - np.pi / 2.0
-    g_right._current_port.origin[0] = g_right.current_port.origin[0] + g_right.current_port.width / 2.0
-    g_right._current_port.width = cross_width
-    g_right.add_straight_segment(2 * wg_sep + add_dist_wgcross)
-    g_right.add_straight_segment(wg_sep, electr_width)
-    g_right.add_straight_segment_until_x(x_safe_dist)
-    g_right._current_port.angle = g_right.current_port.angle + np.pi / 2.0
-    g_right._current_port.origin[0] = g_right.current_port.origin[0] + pads_width / 2.0
-    g_right._current_port.width = pads_width
-    g_right.add_straight_segment_until_y(g_left.current_port.origin[1])
-    g_right._current_port.angle = g_right.current_port.angle - np.pi / 2.0
-    g_right._current_port.origin[0] = g_right.current_port.origin[0] + g_right.current_port.width / 2.0
-    g_right._current_port.width = pads_width / 2.
-    g_right._current_port.origin[1] = g_right.current_port.origin[1] - g_right._current_port.width / 2.
-    g_right.add_straight_segment(2 * pads_pitch + pads_width)
-    cell.add_to_layer(electrode_layer, g_right)
+
 
     ##WRITE FIELDs waveguide
     added_y_space_formarkers = 160
@@ -353,7 +434,7 @@ def TimeBin_BS(label, num, add_xlength=0., add_ylength=100., sep=4., r_curve=50.
         y_cords = y_cords + list(temp_y_cords)
     x_max = max(x_cords) + box_dist
     x_min = min(x_cords) - box_dist
-    y_max = max(y_cords) + box_dist + added_y_space_formarkers
+    y_max = max(y_cords) + box_dist + added_y_space_formarkers - add_dist + dy_adj
     y_min = min(y_cords) - box_dist
     box_size = (x_max - x_min, y_max - y_min)
 
@@ -401,10 +482,12 @@ def TimeBin_BS(label, num, add_xlength=0., add_ylength=100., sep=4., r_curve=50.
     ####Local markers
     dist_mtom = 100
     dist_mtobox = 25
-    y_dist_save = 420
+    y_dist_save = 420 #520
+
+    # dx_adj= 0 #6859.124 - 6940.176### hack to match the old Munster markers, SP 24/10/21
     # ### first set on layer 3
-    positions = [(x_min + dist_mtobox, y_max - y_dist_save - dist_mtobox),
-                 (x_min + dist_mtobox, y_max - y_dist_save - dist_mtobox - 2 * dist_mtom),
+    positions = [(x_min + dist_mtobox - dx_adj, y_max - y_dist_save - dist_mtobox),
+                 (x_min + dist_mtobox - dx_adj, y_max - y_dist_save - dist_mtobox - 2 * dist_mtom),
                  (x_maxe - dist_mtobox, y_max - dist_mtobox)]
     marker = [SquareMarker.make_marker(position, 20) for position in positions]
     cell.add_to_layer(marker_layer_1, geometric_union(marker))
@@ -414,8 +497,8 @@ def TimeBin_BS(label, num, add_xlength=0., add_ylength=100., sep=4., r_curve=50.
     cell.add_to_layer(marker_protection_layer, geometric_union(marker))
     #
     # ### second set on layer 4
-    positions = [(x_min + dist_mtobox, y_max - y_dist_save - dist_mtobox - dist_mtom),
-                 (x_min + dist_mtobox, y_max - y_dist_save - dist_mtobox - 3 * dist_mtom),
+    positions = [(x_min + dist_mtobox- dx_adj, y_max - y_dist_save - dist_mtobox - dist_mtom),
+                 (x_min + dist_mtobox- dx_adj, y_max - y_dist_save - dist_mtobox - 3 * dist_mtom),
                  (x_maxe - dist_mtobox - dist_mtom, y_max - dist_mtobox)]
     marker = [SquareMarker.make_marker(position, 20) for position in positions]
     cell.add_to_layer(marker_layer_2, geometric_union(marker))
@@ -425,7 +508,7 @@ def TimeBin_BS(label, num, add_xlength=0., add_ylength=100., sep=4., r_curve=50.
     cell.add_to_layer(marker_protection_layer, geometric_union(marker))
 
     ###Label
-    device_label = Text(origin=(x_mine+300, y_max - 50), height=30,
+    device_label = Text(origin=(x_mine+400, y_max - 880), height=30,
                         text=label, alignment='center-bottom', angle=np.pi)
     cell.add_to_layer(wg_layer, device_label)
 

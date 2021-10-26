@@ -1,4 +1,5 @@
 import numpy as np
+from copy import deepcopy
 
 from gdshelpers.parts.text import Text
 from gdshelpers.parts.waveguide import Waveguide
@@ -28,8 +29,9 @@ from euler_curves import wgAdd_EulerBend, EulerLength
 from tech.LiNb01 import *
 
 
-def MZI_active(coupler_sep, coupler_length, MZ_length, electrodes_sep, label, exp_wg_width=wg_Expwidth, grating_coupler_period = std_coupler_params['grating_period']):
-    cell = Cell('MZI_active'+label)
+
+def MZI_active_with_phase(coupler_sep, coupler_length, MZ_length, electrodes_sep, label):
+    cell = Cell('MZI_active_withphase'+label)
 
     x_in = 0
     y_in = 0
@@ -42,14 +44,13 @@ def MZI_active(coupler_sep, coupler_length, MZ_length, electrodes_sep, label, ex
     ##Generating input and output grating couplers
 
     coupler_params = std_coupler_params.copy()
-    coupler_params['grating_period'] = grating_coupler_period
 
     for j in (0, 1):
         incoupler = GratingCoupler.make_traditional_coupler((x_in + j * opt_space, y_in), **coupler_params)
         cell.add_to_layer(wg_layer, incoupler)
 
     outcouplers = []
-    for j in (4, 5):
+    for j in (3, 4):
         outcoupler = GratingCoupler.make_traditional_coupler((x_in + j * opt_space, y_in), **coupler_params)
         outcouplers.append(outcoupler)
         cell.add_to_layer(wg_layer, outcoupler)
@@ -83,8 +84,11 @@ def MZI_active(coupler_sep, coupler_length, MZ_length, electrodes_sep, label, ex
         #add taper to multimode wg
         wg[j].add_straight_segment(taper_length, final_width=wg_width_in_mod)
 
-        ###reference port for electrodes
+        ###reference port for electrodes in MZI
         ref_port = wg[j].current_port
+
+        ###reference port for electrodes in PHASE
+        ref_port_ph = wg[j].current_port
 
         ###straight section
         wg[j].add_straight_segment(MZ_length)
@@ -102,40 +106,34 @@ def MZI_active(coupler_sep, coupler_length, MZ_length, electrodes_sep, label, ex
         wg[j].add_parameterized_path(path=lambda t: (t * x_length, .5 * (np.cos(np.pi * t) - 1) * y_length),
                                      path_derivative=lambda t: (x_length, -np.pi * .5 * np.sin(np.pi * t) * y_length))
 
-        ### Old version. SP 23/10/21
-        # wg[j].add_straight_segment(bend_r)
-        # wg[j].add_bend(np.pi, bend_r + j * wg_sep)
-        # wg[j].add_straight_segment(taper_length, final_width=wg_width_in_mod)
-        # wg[j].add_straight_segment(2 * bend_r + MZ_length + 4 * x_length + 2 * coupler_length)
-        # wg[j].add_straight_segment(taper_length, final_width=wg_width)
-        # wg[j].add_bend(-np.pi / 2.0, bend_r + (1 - j) * wg_sep)
-        # wg[j].add_straight_segment(31 + (1 - j) * (opt_space - wg_sep))
-        # wg[j].add_bend(-np.pi / 2.0, bend_r + (1 - j) * wg_sep)
-        # wg[j].add_straight_segment(bend_r)
 
-        ### New version with larger bend radius. SP 23/10/21
-        x_dist_inout=40
+
+        x_dist_inout=2*mod_params['electrode_width'] + 15
         wg[j].add_straight_segment(10)
         wg[j].add_bend(np.pi/2., bend_r + j * wg_sep)
         wg[j].add_straight_segment(x_dist_inout+wg_sep)
         wg[j].add_bend(np.pi, bend_r + j * wg_sep)
         wg[j].add_bend(-np.pi / 2., bend_r + (1-j) * wg_sep)
+        wg[j].add_straight_segment_until_y(inports[0].y - 3*bend_r)
+        wg[j].add_bend(-np.pi / 2., bend_r + (1 - j) * wg_sep)
+        wg[j].add_straight_segment_until_x(outcouplers[-1].origin[0]+bend_r)
+        wg[j].add_bend(np.pi / 2., bend_r + j * wg_sep)
 
-        wg[j].add_straight_segment(l_Exptaper, exp_wg_width)
-        wg[j].add_straight_segment_until_y(inports[0].y - l_Exptaper)
-        wg[j].add_straight_segment(l_Exptaper, wg_width)
-
+        wg[j].add_straight_segment_until_y(inports[0].y)
         wg[j].add_straight_segment(grating_added_taper_len)
-        wg[j].add_bend(-np.pi / 2., bend_r + (1 - j) * wg_sep)
-        wg[j].add_straight_segment_until_x(outcouplers[1-j].origin[0]-(bend_r + (1 - j) * wg_sep))
-        wg[j].add_bend(-np.pi / 2., bend_r + (1 - j) * wg_sep)
-        # adding final tapers as suggested by Munster, SP 21/10/21
+        wg[j].add_bend(np.pi / 2., bend_r + j* wg_sep)
+        wg[j].add_straight_segment_until_x(outcouplers[1-j].origin[0]+(bend_r + j * wg_sep))
+        wg[j].add_bend(np.pi / 2., bend_r + j*wg_sep)
+        # # adding final tapers as suggested by Munster, SP 21/10/21
         wg[j].add_straight_segment(grating_added_taper_len, final_width=std_coupler_params['width'])
 
     for j in (0, 1):
         cell.add_to_layer(wg_layer, wg[j])
 
     ##MODULATOR ELECTRODES
+
+
+    #### ELECTRODES IN MZI
 
     electr_width = mod_params['electrode_width']
     sep_econns = mod_params['electrode_sep_y']
@@ -154,13 +152,6 @@ def MZI_active(coupler_sep, coupler_length, MZ_length, electrodes_sep, label, ex
     g_left._current_port.angle = g_left.current_port.angle - np.pi / 2.0
     g_left._current_port.origin[0] = g_left.current_port.origin[0] + g_left.current_port.width / 2.0
     g_left.add_straight_segment_until_x(x_safe_dist)
-    ### Old version. SP 23/10/21
-    # g_left.add_straight_segment(2 * pads_pitch)
-    # g_left._current_port.angle = g_left.current_port.angle + np.pi / 2.0
-    # g_left._current_port.origin[0] = g_left.current_port.origin[0] + pads_width / 2.0
-    # g_left._current_port.width = pads_width
-
-    ## New version with larger gnd pads. SP 23/10/21
     g_left.add_straight_segment(2 * pads_pitch + (pads_width-pads_width_gnd/2.))
     g_left._current_port.angle = g_left.current_port.angle + np.pi / 2.0
     g_left._current_port.origin[0] = g_left.current_port.origin[0] + pads_width_gnd / 2.0
@@ -179,13 +170,6 @@ def MZI_active(coupler_sep, coupler_length, MZ_length, electrodes_sep, label, ex
     s.add_straight_segment(wg_sep+5)
     s.add_straight_segment(wg_sep, electr_width)
     s.add_straight_segment_until_x(x_safe_dist)
-    ### Old version. SP 23/10/21
-    # s.add_straight_segment(pads_pitch)
-    # s._current_port.angle = s.current_port.angle + np.pi / 2.0
-    # s._current_port.origin[0] = s.current_port.origin[0] + pads_width / 2.0
-    # s._current_port.width = pads_width
-
-    ### New version with larger gnd pads. SP 23/10/21
     s.add_straight_segment(pads_pitch+ (pads_width-pads_width_gnd/2.))
     s._current_port.angle = s.current_port.angle + np.pi / 2.0
     s._current_port.origin[0] = s.current_port.origin[0] + pads_width / 2.0
@@ -204,18 +188,6 @@ def MZI_active(coupler_sep, coupler_length, MZ_length, electrodes_sep, label, ex
     g_right.add_straight_segment(2*wg_sep+5)
     g_right.add_straight_segment(wg_sep, electr_width)
     g_right.add_straight_segment_until_x(x_safe_dist)
-    ### Old version. SP 23/10/21
-    # g_right._current_port.angle = g_right.current_port.angle + np.pi / 2.0
-    # g_right._current_port.origin[0] = g_right.current_port.origin[0] + pads_width / 2.0
-    # g_right._current_port.width = pads_width
-    # g_right.add_straight_segment_until_y(g_left.current_port.origin[1])
-    # g_right._current_port.angle = g_right.current_port.angle - np.pi / 2.0
-    # g_right._current_port.origin[0] = g_right.current_port.origin[0] + g_right.current_port.width / 2.0
-    # g_right._current_port.width = pads_width / 2.
-    # g_right._current_port.origin[1] = g_right.current_port.origin[1] - g_right._current_port.width / 2.
-    # g_right.add_straight_segment(2 * pads_pitch + pads_width)
-
-    ## New version with larger gnd pads. SP 23/10/21
     g_right.add_straight_segment(pads_width_gnd/2.)
     g_right._current_port.angle = g_right.current_port.angle + np.pi / 2.0
     g_right._current_port.origin[0] = g_right.current_port.origin[0] + pads_width_gnd / 2.0
@@ -228,6 +200,86 @@ def MZI_active(coupler_sep, coupler_length, MZ_length, electrodes_sep, label, ex
     g_right.add_straight_segment(2 * pads_pitch + pads_width)
 
     cell.add_to_layer(electrode_layer, g_right)
+
+
+
+    #### ELECTRODES FOR PHASE
+    ref_port_ph = deepcopy(ref_port)
+    ref_port_ph.origin[0] = ref_port.origin[0] + 2*wg_sep + x_dist_inout
+    x_safe_dist_ph = ref_port_ph.origin[0] + min_safedist_from_wg + pads_width
+    x_startpos_pads_ph = s._current_port.origin[0] + 4*pads_pitch + (pads_width_gnd - pads_width)/2. + (pads_width-pads_width_gnd/2.)
+    y_startpos_pads_ph = s._current_port.origin[1] +280
+
+    ##right ground electrode
+    Inport = Port((ref_port_ph.origin[0] + electrodes_sep / 2.0 + wg_sep / 2.0, ref_port.origin[1]), np.deg2rad(-90), electr_width)
+    g_right_ph = Waveguide.make_at_port(Inport)
+    g_right_ph.add_straight_segment(MZ_length - cross_width/2. - 2 * sep_econns)
+    g_right_ph._current_port.angle = g_right_ph.current_port.angle + np.pi / 2.0
+    g_right_ph._current_port.origin[0] = g_right_ph.current_port.origin[0] - g_right_ph.current_port.width / 2.0
+    g_right_ph.add_straight_segment_until_x(x_startpos_pads_ph)
+    g_right_ph._current_port.angle = g_right_ph.current_port.angle - np.pi / 2.0
+    g_right_ph._current_port.origin[0] = g_right_ph.current_port.origin[0] - g_right_ph.current_port.width / 2.0
+    g_right_ph.add_straight_segment_until_y(y_startpos_pads_ph-2*sep_econns+ g_right_ph.current_port.width)
+    g_right_ph._current_port.origin[0] = g_right_ph._current_port.origin[0] - (pads_width_gnd- g_right_ph.current_port.width) / 2.0
+    g_right_ph._current_port.width = pads_width_gnd
+    g_right_ph.add_straight_segment_until_y(g_left._current_port.origin[1])
+
+    cell.add_to_layer(electrode_layer, g_right_ph)
+
+    ## signal electrode
+    Inport = Port((ref_port_ph.origin[0] - wg_sep / 2.0, ref_port_ph.origin[1]), np.deg2rad(-90), electr_width - electrodes_sep)
+    s_ph = Waveguide.make_at_port(Inport)
+    s_ph.add_straight_segment(MZ_length - cross_width/2. - sep_econns)
+    s_ph._current_port.angle = s.current_port.angle + np.pi / 2.0
+    s_ph._current_port.origin[0] = s_ph.current_port.origin[0] - s_ph.current_port.width / 2.0
+    s_ph._current_port.width = cross_width
+    s_ph.add_straight_segment(wg_sep+5)
+    s_ph.add_straight_segment(wg_sep, electr_width)
+    s_ph.add_straight_segment_until_x(x_startpos_pads_ph - sep_econns)
+    s_ph._current_port.angle = s_ph.current_port.angle - np.pi / 2.0
+    s_ph._current_port.origin[0] = s_ph.current_port.origin[0] - s_ph.current_port.width / 2.0
+    s_ph.add_straight_segment_until_y(y_startpos_pads_ph-sep_econns)
+    s_ph._current_port.angle = s_ph.current_port.angle - np.pi / 2.0
+    s_ph._current_port.origin[1] = s_ph.current_port.origin[1] + s_ph.current_port.width / 2.0
+
+    s_ph.add_straight_segment_until_x(s.current_port.origin[0] + 3*pads_pitch-pads_width / 2.0)
+    s_ph._current_port.angle = s_ph.current_port.angle + np.pi / 2.0
+    s_ph._current_port.origin[0] = s_ph.current_port.origin[0] + pads_width / 2.0
+    s_ph._current_port.width = pads_width
+    s_ph.add_straight_segment_until_y(s.current_port.origin[1])
+    cell.add_to_layer(electrode_layer, s_ph)
+
+    ##left ground electrode
+    Inport = Port((ref_port_ph.origin[0] - wg_sep - wg_sep / 2.0 - electrodes_sep / 2.0, ref_port_ph.origin[1]), np.deg2rad(-90), electr_width)
+    g_left_ph = Waveguide.make_at_port(Inport)
+    g_left_ph.add_straight_segment(MZ_length - cross_width/2.)
+    g_left_ph._current_port.angle = g_left_ph.current_port.angle + np.pi / 2.0
+    g_left_ph._current_port.origin[0] = g_left_ph.current_port.origin[0] - g_left_ph.current_port.width / 2.0
+    g_left_ph._current_port.width = cross_width
+    g_left_ph.add_straight_segment(2*wg_sep+5)
+    g_left_ph.add_straight_segment(wg_sep, electr_width)
+    g_left_ph.add_straight_segment_until_x(x_startpos_pads_ph - 2*sep_econns)
+    g_left_ph._current_port.angle = g_left_ph.current_port.angle - np.pi / 2.0
+    g_left_ph._current_port.origin[0] = g_left_ph.current_port.origin[0] - g_left_ph.current_port.width / 2.0
+    g_left_ph.add_straight_segment_until_y(y_startpos_pads_ph)
+
+    g_left_ph._current_port.angle = g_left_ph.current_port.angle - np.pi / 2.0
+    g_left_ph._current_port.origin[1] = g_left_ph.current_port.origin[1] + g_left_ph.current_port.width / 2.0
+    g_left_ph.add_straight_segment_until_x(s.current_port.origin[0] + 2*pads_pitch - pads_width / 2.0)
+    g_left_ph._current_port.angle = g_left_ph.current_port.angle + np.pi / 2.0
+    g_left_ph._current_port.origin[0] = g_left_ph.current_port.origin[0] + pads_width_gnd / 2.0
+    g_left_ph._current_port.width = pads_width_gnd
+    g_left_ph.add_straight_segment_until_y(g_right_ph.current_port.origin[1])
+
+    g_left_ph._current_port.angle = g_left_ph.current_port.angle + np.pi / 2.0
+    g_left_ph._current_port.origin[0] = g_left_ph.current_port.origin[0] - g_left_ph.current_port.width / 2.0
+    g_left_ph._current_port.width = pads_width / 2.
+    g_left_ph._current_port.origin[1] = g_left_ph.current_port.origin[1] - g_left_ph._current_port.width / 2.
+    g_left_ph.add_straight_segment(2 * pads_pitch + pads_width)
+
+    cell.add_to_layer(electrode_layer, g_left_ph)
+
+
 
     ###WRITE FIELDs waveguide
 
@@ -245,12 +297,12 @@ def MZI_active(coupler_sep, coupler_length, MZ_length, electrodes_sep, label, ex
 
     ###WRITE FIELDs electrodes
 
-    outer_corners = [(x_in - 210, y_in - 100), (x_in + 5 * 127 + 40, y_in - 100),
-                     (x_in + 5 * 127 + 40, y_in - 100 - 1040), (x_in - 210, y_in - 100 - 1040)]
+    outer_corners = [(x_in - 210, y_in - 100), (x_in + 5 * 127 + 140, y_in - 100),
+                     (x_in + 5 * 127 + 140, y_in - 100 - 1040), (x_in - 210, y_in - 100 - 1040)]
     polygon1 = Polygon(outer_corners)
     cell.add_to_layer(electrode_wf_layer, polygon1)
-    outer_corners = [(x_in - 210, y_in - 100 - 1040), (x_in + 5 * 127 + 40, y_in - 100 - 1040),
-                     (x_in + 5 * 127 + 40, y_in - 100 - 1040 - (MZ_length + 2*taper_length + 762 - 1040)),
+    outer_corners = [(x_in - 210, y_in - 100 - 1040), (x_in + 5 * 127 + 140, y_in - 100 - 1040),
+                     (x_in + 5 * 127 + 140, y_in - 100 - 1040 - (MZ_length + 2*taper_length + 762 - 1040)),
                      (x_in - 210, y_in - 100 - 1040 - (MZ_length + 2*taper_length + 762 - 1040))]
     polygon2 = Polygon(outer_corners)
     cell.add_to_layer(electrode_wf_layer, polygon2)
@@ -260,8 +312,7 @@ def MZI_active(coupler_sep, coupler_length, MZ_length, electrodes_sep, label, ex
     ####Local markers
 
     ### first set on layer 3
-    dx = 25
-    positions = [(x_in + dx, y_in - 320), (x_in+ dx + 5 * 127 - 60, y_in - 320), (x_in+ dx + 5 * 127 - 60, y_in - 320 - 450)]
+    positions = [(x_in, y_in - 320), (x_in + 5 * 127 - 60, y_in - 320), (x_in + 5 * 127 - 60, y_in - 320 - 450)]
     marker = [SquareMarker.make_marker(position, 20) for position in positions]
     cell.add_to_layer(3, geometric_union(marker))
     marker = [SquareMarker.make_marker(position, 30) for position in positions]
@@ -270,7 +321,7 @@ def MZI_active(coupler_sep, coupler_length, MZ_length, electrodes_sep, label, ex
     cell.add_to_layer(15, geometric_union(marker))
 
     ### second set on layer 4
-    positions = [(x_in+ dx, y_in - 320 - 150), (x_in+ dx + 5 * 127 - 60, y_in - 320 - 150), (x_in + dx+ 5 * 127-60, y_in - 320 - 300)]
+    positions = [(x_in, y_in - 320 - 150), (x_in + 5 * 127 - 60, y_in - 320 - 150), (x_in + 5 * 127-60, y_in - 320 - 300)]
     marker = [SquareMarker.make_marker(position, 20) for position in positions]
     cell.add_to_layer(marker_layer_1, geometric_union(marker))
     marker = [SquareMarker.make_marker(position, 30) for position in positions]
@@ -309,12 +360,12 @@ if __name__ == "__main__":
     electrodes_sep = 1.1
 
     for j, MZ_length in enumerate(np.linspace(500, 1250, 4)):
-        temp_cell = MZI_active(coupler_sep, coupler_length, MZ_length, electrodes_sep, 'D%i' % j)
+        temp_cell = MZI_active_with_phase(coupler_sep, coupler_length, MZ_length, electrodes_sep, 'D%i' % j)
         temp_cell.name = 'MZI_test_' + str(j)
         # global_cell.add_cell(temp_cell, origin=(-2000 + j * 1000, -1500), angle=np.pi)
         global_cell.add_cell(temp_cell, origin=(-2000 + j * 1000, -1500))
 
 
     print('starting device saving')
-    global_cell.save('tests_Modulators.gds')
+    global_cell.save('tests_ModulatorsWithPhase.gds')
     print('done saving')

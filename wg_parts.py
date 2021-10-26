@@ -32,11 +32,67 @@ def expand_wgs_section_2(wgs, param):
     return global_x_middle, desired_x_position
 
 
+def just_dc_wg(
+    wgs,
+    param,
+    stagger_separation=0,
+    ending_taper=True
+):
+    for idx, wg in enumerate(wgs):
+        increase_length = False
+        if (
+            wg.current_port.width < param['mm_wg_width']
+            and param['mm_taper_length'] > 0
+        ):
+            wg.add_straight_segment(param['mm_taper_length'],
+                                    param['mm_wg_width'])
+            increase_length = True
+
+        # taper for mm assuming the wg is mm during electrodes
+        if param['mm_taper_length'] > 0:
+            wg.add_straight_segment(param['mm_taper_length'],
+                                    param['sm_wg_width'])
+
+        # directional coupler
+        x_length = param['sine_s_x']
+        y_length = (param['wg_sep'] / 2.0
+                    - (param['coupler_sep'] + param['sm_wg_width']) / 2.0
+                    - idx * (param['wg_sep'] - param['sm_wg_width']
+                             - param['coupler_sep'])
+                    )
+        if wg.current_port.angle == -np.pi/2:
+            y_length *= -1
+        wg.add_parameterized_path(path=lambda t: (t * x_length, .5
+                                                  * (np.cos(np.pi * t) - 1)
+                                                  * y_length),
+                                  path_derivative=lambda t: (
+                                         x_length, -np.pi * .5
+                                         * np.sin(np.pi * t) * y_length
+                                  ))
+        wg.add_straight_segment(param['coupler_length'])
+        y_length = -(param['wg_sep'] / 2.0
+                     - (param['coupler_sep'] + param['sm_wg_width']) / 2.0
+                     - idx * (param['wg_sep']
+                     - param['sm_wg_width']
+                     - param['coupler_sep']))
+        if wg.current_port.angle == -np.pi/2:
+            y_length *= -1
+        wg.add_parameterized_path(path=lambda t: (t * x_length, .5
+                                                  * (np.cos(np.pi * t) - 1)
+                                                  * y_length),
+                                  path_derivative=lambda t: (
+                                      x_length, -np.pi * .5
+                                      * np.sin(np.pi * t) * y_length
+                                  ))
+        if param['mm_taper_length'] > 0 and ending_taper:
+            wg.add_straight_segment(param['mm_taper_length'],
+                                    param['mm_wg_width'])
+
 def phase_shifter_and_dc_wg(
     wgs,
     param,
     stagger_separation=0,
-    ending_taper=True,
+    ending_taper=True
 ):
     for idx, wg in enumerate(wgs):
         increase_length = False
@@ -148,6 +204,8 @@ def wgs_to_fiber_array(
                 coupler_positions[idx][0] - param['min_radius']
             )
             wg.add_bend(first_bend, param['min_radius'])
+            # adiabatic taper
+            wg.add_straight_segment(40, final_width=0.75)
             wg.add_straight_segment_until_y(
                 coupler_positions[idx][1]
             )
@@ -205,6 +263,8 @@ def wgs_to_fiber_array(
                 coupler_positions[idx][0] + param['min_radius']
             )
             wg.add_bend(first_bend, param['min_radius'])
+            # adiabatic taper
+            wg.add_straight_segment(40, final_width=0.75)
             wg.add_straight_segment_until_y(
                 coupler_positions[idx][1]
             )
